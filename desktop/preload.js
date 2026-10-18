@@ -37,6 +37,11 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   // Git Source Control (Multi-Repo Support)
   getGitRepos: () => ipcRenderer.invoke('horizon:get-git-repos'),
   gitStatus: (repoPath = null) => ipcRenderer.invoke('horizon:git-status', repoPath),
+  gitHistory: (repoPath = null) => ipcRenderer.invoke('horizon:git-history', repoPath),
+  gitCommitFiles: (repoPath, commitHash) => ipcRenderer.invoke('horizon:git-commit-files', { repoPath, commitHash }),
+  gitStageFile: (repoPath, filePath) => ipcRenderer.invoke('horizon:git-stage-file', { repoPath, filePath }),
+  gitUnstageFile: (repoPath, filePath) => ipcRenderer.invoke('horizon:git-unstage-file', { repoPath, filePath }),
+  gitDiscardFile: (repoPath, filePath) => ipcRenderer.invoke('horizon:git-discard-file', { repoPath, filePath }),
   gitCommit: (repoPath, message) => ipcRenderer.invoke('horizon:git-commit', { repoPath, message }),
   gitPush: (repoPath = null) => ipcRenderer.invoke('horizon:git-push', repoPath),
   gitPull: (repoPath = null) => ipcRenderer.invoke('horizon:git-pull', repoPath),

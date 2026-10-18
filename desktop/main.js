@@ -538,24 +538,100 @@ ipcMain.handle('horizon:git-status', async (event, targetRepo = null) => {
   return new Promise((resolve) => {
     exec('git rev-parse --abbrev-ref HEAD', { cwd: repoCwd, shell: 'powershell.exe' }, (err1, stdout1) => {
       if (err1) {
-        return resolve({ success: false, isGit: false, repoPath: repoCwd, branch: '', changes: [] });
+        return resolve({ success: false, isGit: false, repoPath: repoCwd, branch: '', staged: [], unstaged: [], changes: [] });
       }
       const branch = (stdout1 || '').trim();
       exec('git status --porcelain -uall', { cwd: repoCwd, shell: 'powershell.exe' }, (err2, stdout2) => {
+        const staged = [];
+        const unstaged = [];
         const changes = [];
         const lines = (stdout2 || '').split(/\r?\n/).filter(l => l.trim());
+
         for (const line of lines) {
-          const status = line.slice(0, 2).trim();
+          const x = line[0];
+          const y = line[1];
           const file = line.slice(3).trim();
-          changes.push({
-            status,
-            file,
-            name: path.basename(file),
-            fullPath: path.resolve(repoCwd, file)
-          });
+          const fullPath = path.resolve(repoCwd, file);
+          const name = path.basename(file);
+
+          const item = { status: line.slice(0, 2).trim(), file, name, fullPath };
+          changes.push(item);
+
+          if (x !== ' ' && x !== '?') {
+            staged.push({ status: x, file, name, fullPath });
+          }
+          if (y !== ' ' || (x === '?' && y === '?')) {
+            unstaged.push({ status: y === '?' ? 'U' : y, file, name, fullPath });
+          }
         }
-        resolve({ success: true, isGit: true, repoPath: repoCwd, branch, changes });
+        resolve({ success: true, isGit: true, repoPath: repoCwd, branch, staged, unstaged, changes });
       });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-history', async (event, targetRepo = null) => {
+  const repoCwd = resolveRepoPath(targetRepo);
+  return new Promise((resolve) => {
+    exec('git log -n 30 --pretty=format:"%H|%h|%an|%ar|%s"', { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout) => {
+      if (err) return resolve({ success: false, commits: [] });
+      const lines = (stdout || '').split(/\r?\n/).filter(l => l.trim());
+      const commits = lines.map(line => {
+        const [hash, shortHash, author, relativeTime, ...msgParts] = line.split('|');
+        return {
+          hash,
+          shortHash,
+          author,
+          relativeTime,
+          message: msgParts.join('|')
+        };
+      });
+      resolve({ success: true, commits, repoPath: repoCwd });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-commit-files', async (event, { repoPath, commitHash }) => {
+  const repoCwd = resolveRepoPath(repoPath);
+  return new Promise((resolve) => {
+    exec(`git diff-tree --no-commit-id --name-status -r "${commitHash}"`, { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout) => {
+      if (err) return resolve({ success: false, files: [] });
+      const lines = (stdout || '').split(/\r?\n/).filter(l => l.trim());
+      const files = lines.map(l => {
+        const parts = l.split(/\s+/);
+        return { status: parts[0], file: parts.slice(1).join(' ') };
+      });
+      resolve({ success: true, files });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-stage-file', async (event, { repoPath, filePath }) => {
+  const repoCwd = resolveRepoPath(repoPath);
+  const rel = path.relative(repoCwd, filePath).replace(/\\/g, '/');
+  return new Promise((resolve) => {
+    exec(`git add "${rel}"`, { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+      resolve({ success: !err, error: stderr || (err ? err.message : '') });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-unstage-file', async (event, { repoPath, filePath }) => {
+  const repoCwd = resolveRepoPath(repoPath);
+  const rel = path.relative(repoCwd, filePath).replace(/\\/g, '/');
+  return new Promise((resolve) => {
+    exec(`git reset HEAD "${rel}"`, { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+      resolve({ success: !err, error: stderr || (err ? err.message : '') });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-discard-file', async (event, { repoPath, filePath }) => {
+  const repoCwd = resolveRepoPath(repoPath);
+  const rel = path.relative(repoCwd, filePath).replace(/\\/g, '/');
+  return new Promise((resolve) => {
+    exec(`git checkout -- "${rel}"; git clean -fd "${rel}"`, { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+      resolve({ success: !err, error: stderr || (err ? err.message : '') });
     });
   });
 });
@@ -604,7 +680,6 @@ ipcMain.handle('horizon:git-diff', async (event, { repoPath, filePath }) => {
   const repoCwd = resolveRepoPath(repoPath);
   const relPath = path.relative(repoCwd, filePath).replace(/\\/g, '/');
   return new Promise((resolve) => {
-    // Get original content from HEAD
     exec(`git show HEAD:"${relPath}"`, { cwd: repoCwd, shell: 'powershell.exe', maxBuffer: 10 * 1024 * 1024 }, async (err1, stdoutOriginal) => {
       const original = err1 ? '' : stdoutOriginal;
       let working = '';

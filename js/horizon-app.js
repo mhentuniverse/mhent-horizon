@@ -729,6 +729,17 @@ window.AisaHorizonApp = {
     const container = document.getElementById('editor-tabs-bar');
     if (!container) return;
 
+    // Horizontal wheel scrolling for tabs bar
+    if (!container._hasWheel) {
+      container._hasWheel = true;
+      container.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0) {
+          e.preventDefault();
+          container.scrollLeft += e.deltaY;
+        }
+      }, { passive: false });
+    }
+
     container.innerHTML = this.openTabs.map(t => {
       const isActive = t.path === this.activeTabPath;
       const icon = t.isMedia ? (t.mediaType === 'video' ? '🎬' : t.mediaType === 'audio' ? '🎵' : '🖼️') : (t.isBinary ? '📦' : this.getFileIcon(t.name));
@@ -756,6 +767,44 @@ window.AisaHorizonApp = {
         this.closeTab(p);
       });
     });
+
+    // Synchronize Explorer "OPEN EDITORS" List
+    const openList = document.getElementById('open-editors-list');
+    const openCount = document.getElementById('open-editors-count');
+    if (openCount) openCount.textContent = this.openTabs.length;
+    if (openList) {
+      if (this.openTabs.length === 0) {
+        openList.innerHTML = `<div style="padding: 6px 12px; color: var(--text-dim); font-size: 11px;">Chưa mở tệp nào</div>`;
+      } else {
+        openList.innerHTML = this.openTabs.map(t => {
+          const isActive = t.path === this.activeTabPath;
+          const icon = t.isMedia ? (t.mediaType === 'video' ? '🎬' : t.mediaType === 'audio' ? '🎵' : '🖼️') : (t.isBinary ? '📦' : this.getFileIcon(t.name));
+          return `
+            <div class="open-editor-item ${isActive ? 'active' : ''}" data-path="${t.path}">
+              <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <span>${icon}</span>
+                <span>${t.name}${t.isDirty ? ' ●' : ''}</span>
+              </span>
+              <span class="open-editor-close" data-close="${t.path}">×</span>
+            </div>
+          `;
+        }).join('');
+
+        openList.querySelectorAll('.open-editor-item').forEach(el => {
+          el.addEventListener('click', (e) => {
+            if (e.target.classList.contains('open-editor-close')) return;
+            this.switchTab(el.getAttribute('data-path'));
+          });
+        });
+
+        openList.querySelectorAll('.open-editor-close').forEach(el => {
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.closeTab(el.getAttribute('data-close'));
+          });
+        });
+      }
+    }
   },
 
   // ==========================================================================
@@ -903,19 +952,28 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 7. WORKSPACE SEARCH PANEL
+  // 7. WORKSPACE SEARCH PANEL (LIVE INSTANT SEARCH WITH DEBOUNCE)
   // ==========================================================================
   setupSearchPanel() {
     const input = document.getElementById('workspace-search-input');
     const flagCase = document.getElementById('btn-flag-case');
+    const flagWord = document.getElementById('btn-flag-word');
     const flagRegex = document.getElementById('btn-flag-regex');
     const btnClear = document.getElementById('btn-clear-search');
     const resultsContainer = document.getElementById('search-results-container');
     const statusBar = document.getElementById('search-status-bar');
 
+    let searchDebounceTimer = null;
+
     flagCase?.addEventListener('click', () => {
       this.searchFlags.isCase = !this.searchFlags.isCase;
       flagCase.classList.toggle('active', this.searchFlags.isCase);
+      if (input.value.trim()) runSearch();
+    });
+
+    flagWord?.addEventListener('click', () => {
+      this.searchFlags.isWord = !this.searchFlags.isWord;
+      flagWord.classList.toggle('active', this.searchFlags.isWord);
       if (input.value.trim()) runSearch();
     });
 
@@ -928,15 +986,18 @@ window.AisaHorizonApp = {
     btnClear?.addEventListener('click', () => {
       input.value = '';
       if (resultsContainer) resultsContainer.innerHTML = '';
-      if (statusBar) statusBar.textContent = 'Nhập từ khóa và bấm Enter';
+      if (statusBar) statusBar.textContent = 'Gõ từ khóa để tìm kiếm tức thì';
     });
 
     const runSearch = async () => {
       const q = input.value.trim();
-      if (!q) return;
+      if (!q) {
+        if (resultsContainer) resultsContainer.innerHTML = '';
+        if (statusBar) statusBar.textContent = 'Gõ từ khóa để tìm kiếm tức thì';
+        return;
+      }
 
       if (statusBar) statusBar.textContent = `Đang tìm kiếm "${q}"...`;
-      if (resultsContainer) resultsContainer.innerHTML = '';
 
       if (!window.AisaHorizon) return;
       const res = await window.AisaHorizon.searchFiles({
@@ -952,10 +1013,12 @@ window.AisaHorizonApp = {
 
       if (!res.results || res.results.length === 0) {
         if (statusBar) statusBar.textContent = `Không tìm thấy kết quả nào cho "${q}"`;
+        if (resultsContainer) resultsContainer.innerHTML = '';
         return;
       }
 
       if (statusBar) statusBar.textContent = `Tìm thấy ${res.totalMatches || res.results.length} kết quả trong ${res.results.length} tệp`;
+      if (resultsContainer) resultsContainer.innerHTML = '';
 
       res.results.forEach(fileResult => {
         const groupEl = document.createElement('div');
@@ -969,9 +1032,18 @@ window.AisaHorizonApp = {
         fileResult.matches.forEach(match => {
           const item = document.createElement('div');
           item.className = 'search-match-item';
+          
+          // Highlight matched substring
+          const rawText = match.lineContent || '';
+          let highlighted = this.escapeHtml(rawText);
+          try {
+            const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, this.searchFlags.isCase ? 'g' : 'gi');
+            highlighted = highlighted.replace(re, '<mark class="search-highlight">$1</mark>');
+          } catch (e) {}
+
           item.innerHTML = `
             <span class="search-match-line">${match.lineNumber}:</span>
-            <span class="search-match-text">${this.escapeHtml(match.lineContent || '')}</span>
+            <span class="search-match-text">${highlighted}</span>
           `;
           item.addEventListener('click', () => {
             this.openFile(fileResult.fullPath, match.lineNumber);
@@ -983,13 +1055,31 @@ window.AisaHorizonApp = {
       });
     };
 
+    // Live search as you type (debounced by 200ms)
+    input?.addEventListener('input', () => {
+      clearTimeout(searchDebounceTimer);
+      const val = input.value.trim();
+      if (!val) {
+        if (resultsContainer) resultsContainer.innerHTML = '';
+        if (statusBar) statusBar.textContent = 'Gõ từ khóa để tìm kiếm tức thì';
+        return;
+      }
+      statusBar.textContent = `Đang tìm "${val}"...`;
+      searchDebounceTimer = setTimeout(() => {
+        runSearch();
+      }, 200);
+    });
+
     input?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') runSearch();
+      if (e.key === 'Enter') {
+        clearTimeout(searchDebounceTimer);
+        runSearch();
+      }
     });
   },
 
   // ==========================================================================
-  // 8. MULTI-REPO GIT SOURCE CONTROL
+  // 8. MULTI-REPO GIT SOURCE CONTROL & COMMIT HISTORY
   // ==========================================================================
   async setupGitPanel() {
     const btnRefresh = document.getElementById('btn-refresh-git');
@@ -997,16 +1087,20 @@ window.AisaHorizonApp = {
     const btnPush = document.getElementById('btn-git-push');
     const btnPull = document.getElementById('btn-git-pull');
     const repoSelect = document.getElementById('git-repo-select');
+    const msgInput = document.getElementById('git-commit-msg');
 
-    btnRefresh?.addEventListener('click', () => this.refreshGitStatus());
+    btnRefresh?.addEventListener('click', () => {
+      this.refreshGitStatus();
+      this.loadGitHistory();
+    });
 
     repoSelect?.addEventListener('change', () => {
       this.selectedGitRepo = repoSelect.value;
       this.refreshGitStatus();
+      this.loadGitHistory();
     });
 
-    btnCommit?.addEventListener('click', async () => {
-      const msgInput = document.getElementById('git-commit-msg');
+    const executeCommit = async () => {
       const msg = msgInput?.value.trim();
       if (!msg) {
         alert('Vui lòng nhập thông điệp commit!');
@@ -1020,9 +1114,18 @@ window.AisaHorizonApp = {
         this.printTerminal(res.stdout || '✔ Commit thành công!', '#10b981');
         if (msgInput) msgInput.value = '';
         await this.refreshGitStatus();
+        await this.loadGitHistory();
         this.mascotSay('😈 Echo: Commit ngon lành rồi đó Sakura! Tiếp tục chiến nào! ✨');
       } else {
         this.printTerminal(res?.error || res?.stderr || 'Lỗi khi commit', '#ef4444');
+      }
+    };
+
+    btnCommit?.addEventListener('click', executeCommit);
+    msgInput?.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        executeCommit();
       }
     });
 
@@ -1033,6 +1136,7 @@ window.AisaHorizonApp = {
       if (res && res.success) {
         this.printTerminal(res.stdout || '✔ Push thành công lên GitHub!', '#10b981');
         await this.refreshGitStatus();
+        await this.loadGitHistory();
         this.mascotSay('🌸 Harmony: Đã đồng bộ mã nguồn lên đám mây an toàn rồi nha Sakura! ✨');
       } else {
         this.printTerminal(res?.error || res?.stderr || 'Lỗi khi push git', '#ef4444');
@@ -1047,6 +1151,7 @@ window.AisaHorizonApp = {
         this.printTerminal(res.stdout || '✔ Pull hoàn tất!', '#10b981');
         await this.refreshFileTree();
         await this.refreshGitStatus();
+        await this.loadGitHistory();
       } else {
         this.printTerminal(res?.error || res?.stderr || 'Lỗi khi pull git', '#ef4444');
       }
@@ -1072,6 +1177,7 @@ window.AisaHorizonApp = {
       }).join('');
       this.selectedGitRepo = res.repos[0].path;
       await this.refreshGitStatus();
+      await this.loadGitHistory();
     } else {
       repoSelect.innerHTML = `<option value="">(Không tìm thấy repo)</option>`;
       this.selectedGitRepo = null;
@@ -1146,6 +1252,70 @@ window.AisaHorizonApp = {
         });
       }
     }
+  },
+
+  async loadGitHistory() {
+    const list = document.getElementById('git-history-list');
+    const countTag = document.getElementById('git-history-count');
+    if (!list || !window.AisaHorizon || !this.selectedGitRepo) return;
+
+    const res = await window.AisaHorizon.gitHistory(this.selectedGitRepo);
+    if (!res || !res.success || !res.commits || res.commits.length === 0) {
+      list.innerHTML = `<div style="padding: 10px; color: var(--text-dim); font-size: 11px;">Chưa có commit nào gần đây</div>`;
+      if (countTag) countTag.textContent = '0';
+      return;
+    }
+
+    if (countTag) countTag.textContent = res.commits.length;
+
+    list.innerHTML = res.commits.map(c => {
+      return `
+        <div class="git-commit-card" data-hash="${c.hash}">
+          <div class="git-commit-top">
+            <span class="git-commit-hash">${c.shortHash}</span>
+            <span class="git-commit-time">${c.relativeTime}</span>
+          </div>
+          <div class="git-commit-msg" title="${this.escapeHtml(c.message)}">${this.escapeHtml(c.message)}</div>
+          <div class="git-commit-author">👤 ${this.escapeHtml(c.author)}</div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.git-commit-card').forEach(card => {
+      card.addEventListener('click', async () => {
+        const hash = card.getAttribute('data-hash');
+        const existingFiles = card.querySelector('.git-history-files');
+        if (existingFiles) {
+          existingFiles.remove();
+          return;
+        }
+
+        const filesRes = await window.AisaHorizon.gitCommitFiles(this.selectedGitRepo, hash);
+        if (filesRes && filesRes.success && filesRes.files.length > 0) {
+          const filesContainer = document.createElement('div');
+          filesContainer.className = 'git-history-files';
+          filesContainer.innerHTML = filesRes.files.map(f => {
+            return `
+              <div class="git-history-file-item" data-file="${f.file}">
+                <span class="git-status-tag ${f.status === 'M' ? 'modified' : f.status === 'A' ? 'added' : 'deleted'}">${f.status}</span>
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${f.file}</span>
+              </div>
+            `;
+          }).join('');
+
+          filesContainer.querySelectorAll('.git-history-file-item').forEach(fItem => {
+            fItem.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const rel = fItem.getAttribute('data-file');
+              const full = this.selectedGitRepo + '\\' + rel.replace(/\//g, '\\');
+              this.openFile(full);
+            });
+          });
+
+          card.appendChild(filesContainer);
+        }
+      });
+    });
   },
 
   // ==========================================================================

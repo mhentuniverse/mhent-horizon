@@ -263,7 +263,7 @@
       <!-- Panel 1: File Explorer -->
       <div class="sidebar-subpanel" id="panel-explorer">
         <div class="sidebar-header">
-          <span id="sidebar-workspace-label">KHÔNG GIAN LÀM VIỆC</span>
+          <span>EXPLORER</span>
           <div class="sidebar-actions">
             <button type="button" class="sidebar-action-btn" id="btn-new-file" title="Tạo tệp mới">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
@@ -276,12 +276,28 @@
             </button>
           </div>
         </div>
+
+        <!-- Section 1: Open Editors -->
+        <div class="explorer-section-header" id="sec-open-editors-hdr">
+          <span class="tree-arrow expanded">▶</span>
+          <span>TỆP ĐANG MỞ</span>
+          <span class="git-count-tag" id="open-editors-count">0</span>
+        </div>
+        <div class="open-editors-list" id="open-editors-list">
+          <!-- Injected by JS -->
+        </div>
+
+        <!-- Section 2: Workspace Tree -->
+        <div class="explorer-section-header" id="sec-workspace-hdr">
+          <span class="tree-arrow expanded">▶</span>
+          <span id="sidebar-workspace-label">KHÔNG GIAN LÀM VIỆC</span>
+        </div>
         <div class="file-tree-container" id="file-tree-container">
           <!-- Recursive nested tree dynamically rendered by JS -->
         </div>
       </div>
 
-      <!-- Panel 2: Workspace Search -->
+      <!-- Panel 2: Workspace Search (Live Instant Search) -->
       <div class="sidebar-subpanel" id="panel-search" style="display: none;">
         <div class="sidebar-header">
           <span>TÌM KIẾM DỰ ÁN</span>
@@ -291,18 +307,19 @@
         </div>
         <div class="search-input-wrap">
           <div class="search-box-row">
-            <input type="text" id="workspace-search-input" class="search-input-field" placeholder="Tìm kiếm text hoặc regex (Enter)...">
+            <input type="text" id="workspace-search-input" class="search-input-field" placeholder="Gõ để tìm kiếm trực tiếp...">
             <button type="button" class="search-flag-btn" id="btn-flag-case" title="Phân biệt hoa/thường (Aa)">Aa</button>
+            <button type="button" class="search-flag-btn" id="btn-flag-word" title="Khớp toàn bộ từ (\b)">\b</button>
             <button type="button" class="search-flag-btn" id="btn-flag-regex" title="Biểu thức chính quy (.*)">.*</button>
           </div>
-          <div class="search-status-bar" id="search-status-bar">Nhập từ khóa và bấm Enter</div>
+          <div class="search-status-bar" id="search-status-bar">Gõ từ khóa để tìm kiếm tức thì</div>
         </div>
         <div class="search-results-container" id="search-results-container">
           <!-- Grouped file matches injected by JS -->
         </div>
       </div>
 
-      <!-- Panel 3: Git Source Control (Multi-Repo Support) -->
+      <!-- Panel 3: Git Source Control (Changes & Commit History) -->
       <div class="sidebar-subpanel" id="panel-git" style="display: none;">
         <div class="sidebar-header">
           <span>SOURCE CONTROL</span>
@@ -327,7 +344,7 @@
           </div>
 
           <div class="git-commit-box">
-            <textarea class="git-commit-input" id="git-commit-msg" placeholder="Thông điệp commit (ví dụ: feat: cập nhật tính năng)..." rows="2"></textarea>
+            <textarea class="git-commit-input" id="git-commit-msg" placeholder="Thông điệp commit (Ctrl+Enter để commit)..." rows="2"></textarea>
             <div class="git-commit-actions">
               <button type="button" class="btn-git-action btn-git-commit" id="btn-git-commit">✔ Commit</button>
               <button type="button" class="btn-git-action btn-git-push" id="btn-git-push" title="Đẩy lên remote (git push)">↑ Push</button>
@@ -335,12 +352,22 @@
             </div>
           </div>
 
+          <!-- Section: Changes -->
           <div class="git-changes-header">
             <span>CÁC TỆP ĐÃ THAY ĐỔI</span>
             <span class="git-count-tag" id="git-changes-count">0</span>
           </div>
           <div class="git-changes-list" id="git-changes-list">
             <!-- Changed files list injected by JS -->
+          </div>
+
+          <!-- Section: Commit History (Previous Commits / Pushes) -->
+          <div class="git-changes-header" style="margin-top: 14px;" id="git-history-toggle">
+            <span>LỊCH SỬ COMMITS / PUSHES</span>
+            <span class="git-count-tag" id="git-history-count">0</span>
+          </div>
+          <div class="git-history-list" id="git-history-list">
+            <!-- Injected by JS: past commits with message, author, relative time, and view diff -->
           </div>
         </div>
       </div>
