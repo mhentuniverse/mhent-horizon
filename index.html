@@ -14,13 +14,13 @@
   <!-- Horizon Master CSS -->
   <link rel="stylesheet" href="css/horizon-theme.css">
   
-  <!-- Monaco Editor AMD Loader with fallback -->
+  <!-- Monaco Editor AMD Loader -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
 </head>
 <body>
 
   <!-- ========================================================================
-       1. HORIZON TITLEBAR (FRAMELESS NATIVE)
+       1. HORIZON TITLEBAR (FRAMELESS NATIVE WITH DROPDOWN MENUS)
        ======================================================================== -->
   <header class="horizon-titlebar">
     <div class="titlebar-left">
@@ -31,18 +31,150 @@
       </div>
 
       <nav class="titlebar-menu">
-        <div class="menu-item" id="menu-file">Tệp</div>
-        <div class="menu-item" id="menu-edit">Chỉnh sửa</div>
-        <div class="menu-item" id="menu-selection">Lựa chọn</div>
-        <div class="menu-item" id="menu-view">Xem</div>
-        <div class="menu-item" id="menu-terminal">Terminal</div>
-        <div class="menu-item" id="menu-copilot">AI Agent</div>
+        <!-- 1. Tệp -->
+        <div class="menu-item-wrap">
+          <div class="menu-item" id="menu-file">Tệp</div>
+          <div class="titlebar-dropdown" id="dropdown-file" style="display: none;">
+            <div class="dropdown-item" id="menu-action-new-file">
+              <span>📄 Tệp mới</span><span class="dropdown-shortcut">Ctrl+N</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-open-folder">
+              <span>📁 Mở thư mục dự án...</span><span class="dropdown-shortcut">Ctrl+O</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" id="menu-action-save">
+              <span>💾 Lưu tệp</span><span class="dropdown-shortcut">Ctrl+S</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-save-all">
+              <span>💾 Lưu tất cả</span><span class="dropdown-shortcut">Ctrl+Shift+S</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-close-tab">
+              <span>✕ Đóng tệp hiện tại</span><span class="dropdown-shortcut">Ctrl+W</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item dropdown-danger" id="menu-action-exit">
+              <span>🚪 Thoát AISA Horizon</span><span class="dropdown-shortcut">Alt+F4</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Chỉnh sửa -->
+        <div class="menu-item-wrap">
+          <div class="menu-item" id="menu-edit">Chỉnh sửa</div>
+          <div class="titlebar-dropdown" id="dropdown-edit" style="display: none;">
+            <div class="dropdown-item" id="menu-action-undo">
+              <span>↩ Hoàn tác (Undo)</span><span class="dropdown-shortcut">Ctrl+Z</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-redo">
+              <span>↪ Làm lại (Redo)</span><span class="dropdown-shortcut">Ctrl+Y</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" id="menu-action-cut">
+              <span>✂ Cắt (Cut)</span><span class="dropdown-shortcut">Ctrl+X</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-copy">
+              <span>📋 Sao chép (Copy)</span><span class="dropdown-shortcut">Ctrl+C</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-paste">
+              <span>📥 Dán (Paste)</span><span class="dropdown-shortcut">Ctrl+V</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" id="menu-action-find">
+              <span>🔍 Tìm kiếm trong tệp</span><span class="dropdown-shortcut">Ctrl+F</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-replace">
+              <span>🔄 Thay thế</span><span class="dropdown-shortcut">Ctrl+H</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-format">
+              <span>✨ Định dạng tài liệu</span><span class="dropdown-shortcut">Shift+Alt+F</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Lựa chọn -->
+        <div class="menu-item-wrap">
+          <div class="menu-item" id="menu-selection">Lựa chọn</div>
+          <div class="titlebar-dropdown" id="dropdown-selection" style="display: none;">
+            <div class="dropdown-item" id="menu-action-select-all">
+              <span>🔘 Chọn tất cả (Select All)</span><span class="dropdown-shortcut">Ctrl+A</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-expand-selection">
+              <span>🔲 Mở rộng vùng chọn</span><span class="dropdown-shortcut">Shift+Alt+→</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Xem -->
+        <div class="menu-item-wrap">
+          <div class="menu-item" id="menu-view">Xem</div>
+          <div class="titlebar-dropdown" id="dropdown-view" style="display: none;">
+            <div class="dropdown-item" id="menu-action-view-explorer">
+              <span>🗂️ Quản lý Tệp (Explorer)</span><span class="dropdown-shortcut">Ctrl+Shift+E</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-view-search">
+              <span>🔍 Tìm kiếm Dự án</span><span class="dropdown-shortcut">Ctrl+Shift+F</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-view-git">
+              <span>🌿 Source Control Git</span><span class="dropdown-shortcut">Ctrl+Shift+G</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-view-terminal">
+              <span>⚡ Terminal Console</span><span class="dropdown-shortcut">Ctrl+`</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-view-copilot">
+              <span>🤖 AISA AI Studio Sidecar</span><span class="dropdown-shortcut">Ctrl+Shift+I</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" id="menu-action-toggle-wrap">
+              <span>↩ Bật/Tắt Word Wrap</span><span class="dropdown-shortcut">Alt+Z</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Terminal -->
+        <div class="menu-item-wrap">
+          <div class="menu-item" id="menu-terminal">Terminal</div>
+          <div class="titlebar-dropdown" id="dropdown-terminal" style="display: none;">
+            <div class="dropdown-item" id="menu-action-term-toggle">
+              <span>⚡ Bật/Tắt Terminal</span><span class="dropdown-shortcut">Ctrl+`</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-term-clear">
+              <span>🧹 Xóa màn hình Terminal</span><span class="dropdown-shortcut">cls</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" id="menu-action-term-run">
+              <span>🚀 Chạy tệp hiện tại (Run)</span><span class="dropdown-shortcut">F5</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. AI Agent -->
+        <div class="menu-item-wrap">
+          <div class="menu-item" id="menu-copilot">AI Agent</div>
+          <div class="titlebar-dropdown" id="dropdown-agent" style="display: none;">
+            <div class="dropdown-item" id="menu-action-agent-open">
+              <span>🤖 Mở AISA AI Studio</span><span class="dropdown-shortcut">Ctrl+Shift+I</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-agent-inline">
+              <span>✨ Sinh mã nội dòng</span><span class="dropdown-shortcut">Ctrl+K</span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" id="menu-action-agent-explain">
+              <span>🔍 Giải thích đoạn mã</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-agent-fix">
+              <span>🐞 Tìm & Sửa lỗi (Debug)</span>
+            </div>
+            <div class="dropdown-item" id="menu-action-agent-refactor">
+              <span>⚡ Tối ưu hóa (Refactor)</span>
+            </div>
+          </div>
+        </div>
       </nav>
     </div>
 
     <div class="titlebar-center">
       <div class="workspace-pill" id="btn-change-workspace" title="Nhấp để đổi thư mục dự án (Ctrl+O)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         <span id="active-workspace-name">MHEnt. Universe</span>
         <kbd>Ctrl+O</kbd>
       </div>
@@ -69,7 +201,7 @@
 
       <!-- Toggle Mascot Companion -->
       <button type="button" class="action-pill-btn active" id="btn-toggle-mascot" title="Bật/Tắt Mascot Đồng hành (Harmony 🌸 & Echo 😈)">
-        <span>🌸😈 Mascot</span>
+        <span>🌸 Mascot</span>
       </button>
 
       <!-- Toggle Copilot Panel -->
@@ -119,7 +251,7 @@
       </div>
 
       <div class="activity-bar-bottom">
-        <button type="button" class="activity-btn" id="act-btn-settings" title="Cài đặt & Tùy biến Horizon">
+        <button type="button" class="activity-btn" id="act-btn-settings" title="Cài đặt API Key & Tùy biến">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
       </div>
@@ -170,7 +302,7 @@
         </div>
       </div>
 
-      <!-- Panel 3: Git Source Control -->
+      <!-- Panel 3: Git Source Control (Multi-Repo Support) -->
       <div class="sidebar-subpanel" id="panel-git" style="display: none;">
         <div class="sidebar-header">
           <span>SOURCE CONTROL</span>
@@ -181,16 +313,25 @@
           </div>
         </div>
         <div class="git-panel-content">
+          <!-- Repository Switcher -->
+          <div class="git-repo-selector-row">
+            <label for="git-repo-select" class="git-repo-label">DỰ ÁN (REPO):</label>
+            <select id="git-repo-select" class="git-repo-select">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+
           <div class="git-branch-indicator" id="git-active-branch-pill">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
             <span id="git-branch-text">main</span>
           </div>
 
           <div class="git-commit-box">
-            <textarea class="git-commit-input" id="git-commit-msg" placeholder="Thông điệp commit (ví dụ: feat: hoàn thiện AISA Horizon)..." rows="2"></textarea>
+            <textarea class="git-commit-input" id="git-commit-msg" placeholder="Thông điệp commit (ví dụ: feat: cập nhật tính năng)..." rows="2"></textarea>
             <div class="git-commit-actions">
               <button type="button" class="btn-git-action btn-git-commit" id="btn-git-commit">✔ Commit</button>
-              <button type="button" class="btn-git-action btn-git-push" id="btn-git-push" title="Đẩy lên remote repository">↑ Push</button>
+              <button type="button" class="btn-git-action btn-git-push" id="btn-git-push" title="Đẩy lên remote (git push)">↑ Push</button>
+              <button type="button" class="btn-git-action btn-git-pull" id="btn-git-pull" title="Kéo từ remote (git pull)">↓ Pull</button>
             </div>
           </div>
 
@@ -206,23 +347,45 @@
 
     </aside>
 
-    <!-- Center Area: Monaco Editor & Terminal -->
+    <!-- Center Area: Tabs -> Breadcrumbs -> Monaco Editor & Media Viewer -> Terminal -->
     <main class="horizon-center-area">
-      <!-- Breadcrumbs Path Bar -->
+      
+      <!-- 1. Tabs Bar on TOP -->
+      <div class="editor-tabs-bar" id="editor-tabs-bar">
+        <!-- Dynamic Tabs Injected by JS -->
+      </div>
+
+      <!-- 2. Breadcrumbs Path Bar DIRECTLY UNDER TABS -->
       <div class="editor-breadcrumbs" id="editor-breadcrumbs">
         <span class="breadcrumb-item breadcrumb-root">MHEnt Workspace</span>
         <span class="breadcrumb-sep">/</span>
         <span class="breadcrumb-item breadcrumb-active" id="breadcrumb-current-file">Chưa mở tệp</span>
       </div>
 
-      <!-- Tabs Bar -->
-      <div class="editor-tabs-bar" id="editor-tabs-bar">
-        <!-- Dynamic Tabs Injected by JS -->
-      </div>
-
-      <!-- Monaco Editor Viewport -->
+      <!-- 3. Multi-View Viewport (Monaco Code, Diff Review, Media Viewer) -->
       <div class="monaco-wrapper" id="monaco-wrapper">
+        <!-- Text/Code Editor -->
         <div id="monaco-editor-instance"></div>
+
+        <!-- Monaco Diff Editor for Antigravity Review & Git Diff -->
+        <div id="monaco-diff-editor-instance" style="display: none; width: 100%; height: 100%;"></div>
+
+        <!-- Floating Action Bar for Diff Review (Antigravity Style) -->
+        <div class="diff-floating-bar" id="diff-floating-bar" style="display: none;">
+          <div class="diff-bar-title">
+            <span class="diff-sparkle">✨</span>
+            <span id="diff-bar-filename">Xem trước thay đổi mã nguồn</span>
+          </div>
+          <div class="diff-bar-actions">
+            <button type="button" class="btn-diff-accept" id="btn-diff-accept">✔ Chấp nhận thay đổi (Ctrl+Enter)</button>
+            <button type="button" class="btn-diff-reject" id="btn-diff-reject">✕ Hủy bỏ</button>
+          </div>
+        </div>
+
+        <!-- Media Viewer (Video, Audio, Image, Binary) -->
+        <div id="media-viewer-instance" class="media-viewer-container" style="display: none;">
+          <!-- Dynamically populated for video/audio/img/binary -->
+        </div>
 
         <!-- Inline AI Code Generator (Ctrl+K) -->
         <div class="inline-ai-widget" id="inline-ai-widget" style="display: none;">
@@ -296,7 +459,7 @@
           <span class="copilot-title">AISA AI Studio</span>
         </div>
 
-        <!-- Antigravity Mode Tabs: Agent | Chat | Changes -->
+        <!-- Antigravity Mode Tabs: Agent | Chat | Review -->
         <div class="copilot-mode-tabs">
           <button type="button" class="copilot-mode-tab active" data-mode="agent" title="Chế độ Tự động Thực thi (Agent)">Agent</button>
           <button type="button" class="copilot-mode-tab" data-mode="chat" title="Hỏi đáp & Lập trình Cặp (Chat)">Chat</button>
@@ -328,7 +491,7 @@
       <div class="copilot-messages-container" id="copilot-messages">
         <div class="copilot-msg-bubble harmony">
           <div class="copilot-speaker-tag harmony">🌸 Harmony</div>
-          <div>Chào Sakura yêu quý! Em và Echo đã sẵn sàng đồng hành cùng cậu kiến tạo dự án hôm nay. Cậu cứ code tự nhiên, cần viết tính năng mới, gỡ bug hay refactor cứ giao cho tụi em nhé! ✨</div>
+          <div>Chào Sakura yêu quý! Em và Echo đã sẵn sàng đồng hành cùng cậu kiến tạo vũ trụ hôm nay! Cậu cần viết tính năng mới, gỡ bug, xem diff hay refactor cứ giao cho tụi em nhé! ✨</div>
         </div>
       </div>
 
@@ -409,6 +572,9 @@
     <div class="ctx-menu-divider"></div>
     <button type="button" class="ctx-menu-item" id="ctx-reveal-explorer">
       <span>📂 Xem trong File Explorer</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-open-external">
+      <span>🚀 Mở bằng ứng dụng hệ thống</span>
     </button>
     <button type="button" class="ctx-menu-item" id="ctx-copy-path">
       <span>📋 Sao chép đường dẫn</span>

@@ -1,6 +1,6 @@
 /**
  * AISA HORIZON - AI-FIRST IDE STUDIO
- * Main Electron Desktop Controller
+ * Master Electron Desktop Controller
  * Miyazaki Haruto Entertainment Co., Ltd.
  */
 
@@ -14,6 +14,12 @@ let mainWindow = null;
 
 // Default workspace is the MHEnt Universe root folder
 let activeWorkspacePath = path.resolve(__dirname, '..', '..');
+
+// File extension categories
+const imageExts = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']);
+const audioExts = new Set(['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac']);
+const videoExts = new Set(['.mp4', '.webm', '.mov', '.mkv', '.avi']);
+const binaryExts = new Set(['.exe', '.dll', '.zip', '.rar', '.7z', '.tar', '.gz', '.bin', '.iso', '.pdf', '.docx', '.xlsx', '.pptx', '.sys', '.dat']);
 
 function getApiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
@@ -38,10 +44,10 @@ async function createWindow() {
   const iconPath = path.join(__dirname, '..', 'assets', 'horizon-logo.png');
 
   mainWindow = new BrowserWindow({
-    width: 1520,
-    height: 940,
-    minWidth: 980,
-    minHeight: 640,
+    width: 1540,
+    height: 960,
+    minWidth: 1024,
+    minHeight: 680,
     frame: false, // Frameless for custom native IDE titlebar
     backgroundColor: '#07080d',
     title: 'AISA Horizon — AI-First IDE Studio (MHEnt Universe)',
@@ -52,7 +58,7 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: false
+      webSecurity: false // Allow loading local media files (file://) in video/audio/img tags
     }
   });
 
@@ -169,6 +175,7 @@ ipcMain.handle('horizon:read-dir', async (event, dirPath = null) => {
   }
 });
 
+// Smart File Reader with Media & Binary detection
 ipcMain.handle('horizon:read-file', async (event, filePath) => {
   try {
     const full = path.resolve(filePath);
@@ -176,15 +183,84 @@ ipcMain.handle('horizon:read-file', async (event, filePath) => {
       return { success: false, error: 'Tệp không tồn tại' };
     }
     const stat = await fsPromises.stat(full);
-    if (stat.size > 20 * 1024 * 1024) {
-      return { success: false, error: 'Tệp quá lớn (>20MB) để mở trong IDE' };
+    const ext = path.extname(full).toLowerCase();
+    const name = path.basename(full);
+
+    // 1. Image files
+    if (imageExts.has(ext)) {
+      return {
+        success: true,
+        isMedia: true,
+        mediaType: 'image',
+        path: full,
+        name,
+        ext,
+        size: stat.size,
+        url: `file:///${full.replace(/\\/g, '/')}`
+      };
     }
+
+    // 2. Audio files
+    if (audioExts.has(ext)) {
+      return {
+        success: true,
+        isMedia: true,
+        mediaType: 'audio',
+        path: full,
+        name,
+        ext,
+        size: stat.size,
+        url: `file:///${full.replace(/\\/g, '/')}`
+      };
+    }
+
+    // 3. Video files
+    if (videoExts.has(ext)) {
+      return {
+        success: true,
+        isMedia: true,
+        mediaType: 'video',
+        path: full,
+        name,
+        ext,
+        size: stat.size,
+        url: `file:///${full.replace(/\\/g, '/')}`
+      };
+    }
+
+    // 4. Other non-editable binary files (exe, zip, rar, 7z, bin, etc.)
+    if (binaryExts.has(ext)) {
+      return {
+        success: true,
+        isBinary: true,
+        path: full,
+        name,
+        ext,
+        size: stat.size
+      };
+    }
+
+    // 5. Text files (skip if > 15MB)
+    if (stat.size > 15 * 1024 * 1024) {
+      return {
+        success: true,
+        isBinary: true,
+        path: full,
+        name,
+        ext,
+        size: stat.size,
+        message: 'Tệp quá lớn (>15MB) để mở trong trình chỉnh sửa văn bản.'
+      };
+    }
+
     const content = await fsPromises.readFile(full, 'utf-8');
     return {
       success: true,
+      isText: true,
       path: full,
-      name: path.basename(full),
-      ext: path.extname(full).toLowerCase(),
+      name,
+      ext,
+      size: stat.size,
       content
     };
   } catch (err) {
@@ -268,6 +344,16 @@ ipcMain.handle('horizon:reveal-in-explorer', (event, targetPath) => {
   }
 });
 
+ipcMain.handle('horizon:open-external', async (event, targetPath) => {
+  try {
+    const full = path.resolve(targetPath);
+    await shell.openPath(full);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 // Helper for recursive file traversal (ignoring heavy/hidden folders)
 async function getAllWorkspaceFiles(dir, maxDepth = 6, currentDepth = 0) {
   if (currentDepth > maxDepth) return [];
@@ -303,30 +389,29 @@ ipcMain.handle('horizon:list-all-files', async () => {
   }
 });
 
-// Global Text Search across Workspace Files (ripgrep-like search)
-ipcMain.handle('horizon:search-files', async (event, { query, isRegex = false, caseSensitive = false }) => {
-  if (!query || !query.trim()) return { success: true, results: [] };
+// Global Text Search across Workspace Files
+ipcMain.handle('horizon:search-files', async (event, { query, isRegex = false, isCaseSensitive = false }) => {
+  if (!query || !query.trim()) return { success: true, results: [], totalMatches: 0 };
   try {
     const files = await getAllWorkspaceFiles(activeWorkspacePath);
-    const binaryExts = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.rar', '.exe', '.dll', '.mp4', '.mp3', '.wav', '.woff', '.woff2', '.ttf']);
     const results = [];
     let regex = null;
 
     if (isRegex) {
       try {
-        regex = new RegExp(query, caseSensitive ? 'g' : 'gi');
+        regex = new RegExp(query, isCaseSensitive ? 'g' : 'gi');
       } catch (e) {
         return { success: false, error: 'Biểu thức chính quy không hợp lệ' };
       }
     }
 
     let matchCount = 0;
-    const maxMatches = 150;
+    const maxMatches = 200;
 
     for (const file of files) {
       if (matchCount >= maxMatches) break;
       const ext = path.extname(file).toLowerCase();
-      if (binaryExts.has(ext)) continue;
+      if (imageExts.has(ext) || audioExts.has(ext) || videoExts.has(ext) || binaryExts.has(ext)) continue;
 
       try {
         const stat = await fsPromises.stat(file);
@@ -344,8 +429,8 @@ ipcMain.handle('horizon:search-files', async (event, { query, isRegex = false, c
             regex.lastIndex = 0;
             matched = regex.test(line);
           } else {
-            const haystack = caseSensitive ? line : line.toLowerCase();
-            const needle = caseSensitive ? query : query.toLowerCase();
+            const haystack = isCaseSensitive ? line : line.toLowerCase();
+            const needle = isCaseSensitive ? query : query.toLowerCase();
             matched = haystack.includes(needle);
           }
 
@@ -372,7 +457,7 @@ ipcMain.handle('horizon:search-files', async (event, { query, isRegex = false, c
 
     return { success: true, results, totalMatches: matchCount };
   } catch (err) {
-    return { success: false, error: err.message, results: [] };
+    return { success: false, error: err.message, results: [], totalMatches: 0 };
   }
 });
 
@@ -386,7 +471,7 @@ ipcMain.handle('horizon:run-command', async (event, { command, cwd = null }) => 
       command,
       {
         cwd: targetCwd,
-        maxBuffer: 15 * 1024 * 1024,
+        maxBuffer: 20 * 1024 * 1024,
         shell: 'powershell.exe',
         timeout: 90000
       },
@@ -404,18 +489,61 @@ ipcMain.handle('horizon:run-command', async (event, { command, cwd = null }) => 
 });
 
 // ============================================================================
-// 4. GIT SOURCE CONTROL OPERATIONS
+// 4. GIT SOURCE CONTROL OPERATIONS (MULTI-REPO AWARE)
 // ============================================================================
-ipcMain.handle('horizon:git-status', async () => {
+// Find all git repositories in the workspace
+async function discoverGitRepos(root) {
+  const repos = [];
+  try {
+    // Check root itself
+    if (fs.existsSync(path.join(root, '.git'))) {
+      repos.push({ name: path.basename(root) || 'root', path: root });
+    }
+    // Check immediate subdirectories
+    const entries = await fsPromises.readdir(root, { withFileTypes: true });
+    for (const ent of entries) {
+      if (ent.isDirectory() && ent.name !== 'node_modules' && ent.name !== '.gemini' && ent.name !== 'dist') {
+        const sub = path.join(root, ent.name);
+        if (fs.existsSync(path.join(sub, '.git'))) {
+          repos.push({ name: ent.name, path: sub });
+        }
+      }
+    }
+  } catch (e) {}
+  return repos;
+}
+
+ipcMain.handle('horizon:get-git-repos', async () => {
+  const repos = await discoverGitRepos(activeWorkspacePath);
+  return { success: true, repos };
+});
+
+function resolveRepoPath(requestedRepo) {
+  if (requestedRepo && fs.existsSync(requestedRepo)) return path.resolve(requestedRepo);
+  // Default to first discovered git repo or active workspace
+  if (fs.existsSync(path.join(activeWorkspacePath, '.git'))) return activeWorkspacePath;
+  // Try subfolders
+  try {
+    const entries = fs.readdirSync(activeWorkspacePath);
+    for (const name of entries) {
+      const sub = path.join(activeWorkspacePath, name);
+      if (fs.existsSync(path.join(sub, '.git'))) return sub;
+    }
+  } catch (e) {}
+  return activeWorkspacePath;
+}
+
+ipcMain.handle('horizon:git-status', async (event, targetRepo = null) => {
+  const repoCwd = resolveRepoPath(targetRepo);
   return new Promise((resolve) => {
-    exec('git rev-parse --abbrev-ref HEAD', { cwd: activeWorkspacePath }, (err1, stdout1) => {
+    exec('git rev-parse --abbrev-ref HEAD', { cwd: repoCwd, shell: 'powershell.exe' }, (err1, stdout1) => {
       if (err1) {
-        return resolve({ isGit: false, branch: '', changes: [] });
+        return resolve({ success: false, isGit: false, repoPath: repoCwd, branch: '', changes: [] });
       }
       const branch = (stdout1 || '').trim();
-      exec('git status --porcelain', { cwd: activeWorkspacePath }, (err2, stdout2) => {
+      exec('git status --porcelain -uall', { cwd: repoCwd, shell: 'powershell.exe' }, (err2, stdout2) => {
         const changes = [];
-        const lines = (stdout2 || '').split('\n').filter(l => l.trim());
+        const lines = (stdout2 || '').split(/\r?\n/).filter(l => l.trim());
         for (const line of lines) {
           const status = line.slice(0, 2).trim();
           const file = line.slice(3).trim();
@@ -423,19 +551,20 @@ ipcMain.handle('horizon:git-status', async () => {
             status,
             file,
             name: path.basename(file),
-            fullPath: path.resolve(activeWorkspacePath, file)
+            fullPath: path.resolve(repoCwd, file)
           });
         }
-        resolve({ isGit: true, branch, changes });
+        resolve({ success: true, isGit: true, repoPath: repoCwd, branch, changes });
       });
     });
   });
 });
 
-ipcMain.handle('horizon:git-commit', async (event, message) => {
+ipcMain.handle('horizon:git-commit', async (event, { repoPath, message }) => {
+  const repoCwd = resolveRepoPath(repoPath);
   const safeMsg = (message || 'update').replace(/"/g, '\\"');
   return new Promise((resolve) => {
-    exec(`git add -A; git commit -m "${safeMsg}"`, { cwd: activeWorkspacePath, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+    exec(`git add -A; git commit -m "${safeMsg}"`, { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout, stderr) => {
       resolve({
         success: !err,
         stdout: stdout || '',
@@ -445,13 +574,53 @@ ipcMain.handle('horizon:git-commit', async (event, message) => {
   });
 });
 
-ipcMain.handle('horizon:git-push', async () => {
+ipcMain.handle('horizon:git-push', async (event, repoPath = null) => {
+  const repoCwd = resolveRepoPath(repoPath);
   return new Promise((resolve) => {
-    exec('git push', { cwd: activeWorkspacePath, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+    exec('git push', { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout, stderr) => {
       resolve({
         success: !err,
         stdout: stdout || '',
         stderr: stderr || (err ? err.message : '')
+      });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-pull', async (event, repoPath = null) => {
+  const repoCwd = resolveRepoPath(repoPath);
+  return new Promise((resolve) => {
+    exec('git pull', { cwd: repoCwd, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+      resolve({
+        success: !err,
+        stdout: stdout || '',
+        stderr: stderr || (err ? err.message : '')
+      });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-diff', async (event, { repoPath, filePath }) => {
+  const repoCwd = resolveRepoPath(repoPath);
+  const relPath = path.relative(repoCwd, filePath).replace(/\\/g, '/');
+  return new Promise((resolve) => {
+    // Get original content from HEAD
+    exec(`git show HEAD:"${relPath}"`, { cwd: repoCwd, shell: 'powershell.exe', maxBuffer: 10 * 1024 * 1024 }, async (err1, stdoutOriginal) => {
+      const original = err1 ? '' : stdoutOriginal;
+      let working = '';
+      try {
+        if (fs.existsSync(filePath)) {
+          working = await fsPromises.readFile(filePath, 'utf-8');
+        }
+      } catch (e) {}
+
+      exec(`git diff HEAD -- "${relPath}"`, { cwd: repoCwd, shell: 'powershell.exe' }, (err2, stdoutDiff) => {
+        resolve({
+          success: true,
+          original,
+          working,
+          diffText: stdoutDiff || ''
+        });
       });
     });
   });

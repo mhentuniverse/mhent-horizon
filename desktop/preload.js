@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   setWorkspacePath: (newPath) => ipcRenderer.invoke('horizon:set-workspace-path', newPath),
   readDir: (dirPath = null) => ipcRenderer.invoke('horizon:read-dir', dirPath),
 
-  // File Operations (Monaco Editor Integration)
+  // File Operations (Monaco Editor & Media Integration)
   readFile: (filePath) => ipcRenderer.invoke('horizon:read-file', filePath),
   writeFile: (filePath, content) => ipcRenderer.invoke('horizon:write-file', { filePath, content }),
   createFile: (filePath) => ipcRenderer.invoke('horizon:create-file', filePath),
@@ -30,13 +30,17 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   deletePath: (targetPath) => ipcRenderer.invoke('horizon:delete-path', targetPath),
   renamePath: (oldPath, newPath) => ipcRenderer.invoke('horizon:rename-path', { oldPath, newPath }),
   revealInExplorer: (targetPath) => ipcRenderer.invoke('horizon:reveal-in-explorer', targetPath),
+  openExternal: (targetPath) => ipcRenderer.invoke('horizon:open-external', targetPath),
   searchFiles: (params) => ipcRenderer.invoke('horizon:search-files', params),
   listAllFiles: () => ipcRenderer.invoke('horizon:list-all-files'),
 
-  // Git Source Control
-  gitStatus: () => ipcRenderer.invoke('horizon:git-status'),
-  gitCommit: (message) => ipcRenderer.invoke('horizon:git-commit', message),
-  gitPush: () => ipcRenderer.invoke('horizon:git-push'),
+  // Git Source Control (Multi-Repo Support)
+  getGitRepos: () => ipcRenderer.invoke('horizon:get-git-repos'),
+  gitStatus: (repoPath = null) => ipcRenderer.invoke('horizon:git-status', repoPath),
+  gitCommit: (repoPath, message) => ipcRenderer.invoke('horizon:git-commit', { repoPath, message }),
+  gitPush: (repoPath = null) => ipcRenderer.invoke('horizon:git-push', repoPath),
+  gitPull: (repoPath = null) => ipcRenderer.invoke('horizon:git-pull', repoPath),
+  gitDiff: (repoPath, filePath) => ipcRenderer.invoke('horizon:git-diff', { repoPath, filePath }),
 
   // Integrated Terminal Runner (PowerShell / CMD)
   runCommand: (command, cwd = null) => ipcRenderer.invoke('horizon:run-command', { command, cwd }),

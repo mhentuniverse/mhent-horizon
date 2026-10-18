@@ -1,29 +1,35 @@
 /**
- * AISA HORIZON - MASTER IDE STUDIO CONTROLLER
- * Full Monaco Editor, Recursive File Explorer, Workspace Search, Git Control,
- * Inline AI Code Generator (Ctrl+K), Quick Open (Ctrl+P), PowerShell Terminal,
- * Google Antigravity Sidecar Agent with Thinking Accordions, and Companion Mascot
+ * AISA HORIZON - MASTER IDE STUDIO CONTROLLER v2.0
+ * Native Multi-Viewer (Monaco Code, Monaco Diff Review, HTML5 Video/Audio/Image, Binary),
+ * Recursive Tree Explorer with Context Menu, Multi-Repo Git Control, Workspace Search,
+ * Titlebar Dropdown Menus, Inline AI Generator (Ctrl+K), Quick Open (Ctrl+P),
+ * Antigravity Agent with Thinking Process & Diff Accept/Reject, and Companion Mascot
  * 
  * Miyazaki Haruto Entertainment Co., Ltd.
  */
 
 window.AisaHorizonApp = {
   editor: null,
+  diffEditor: null,
   activeWorkspace: '',
-  openTabs: [], // Array of { path, name, ext, lang, model, isDirty }
+  openTabs: [], // Array of { path, name, ext, lang, model, content, isMedia, mediaType, url, isBinary, isDirty }
   activeTabPath: null,
   geminiKey: '',
   currentMode: 'agent', // 'agent' | 'chat' | 'review'
   allWorkspaceFiles: [], // Cache for Ctrl+P
+  quickOpenSelectedIndex: 0,
   searchFlags: { isCase: false, isRegex: false },
-  expandedFolders: new Set(), // Set of folder paths currently expanded in tree
-  selectedContextPath: null, // For right-click context menu
+  expandedFolders: new Set(),
+  selectedContextPath: null,
+  gitRepos: [],
+  selectedGitRepo: null,
 
   async init() {
-    console.log('%c[AISA Horizon IDE] Initializing Celestial Studio...', 'color: #38bdf8; font-weight: bold;');
+    console.log('%c[AISA Horizon IDE] Initializing Celestial Studio v2.0...', 'color: #38bdf8; font-weight: bold;');
 
-    // 1. Setup Window & Titlebar Controls
+    // 1. Setup Window & Titlebar Controls + Dropdown Menus
     this.setupTitlebarControls();
+    this.setupDropdownMenus();
 
     // 2. Load API Key and Active Workspace
     if (window.AisaHorizon) {
@@ -40,7 +46,7 @@ window.AisaHorizonApp = {
 
     this.updateWorkspaceUI(this.activeWorkspace);
 
-    // 3. Initialize Monaco Editor
+    // 3. Initialize Monaco Editor & Diff Editor
     this.initMonaco();
 
     // 4. Setup Activity Bar & Subpanel Navigation
@@ -52,8 +58,8 @@ window.AisaHorizonApp = {
     // 6. Setup Workspace Search
     this.setupSearchPanel();
 
-    // 7. Setup Git Source Control
-    this.setupGitPanel();
+    // 7. Setup Git Source Control (Multi-Repo Support)
+    await this.setupGitPanel();
 
     // 8. Setup Terminal Runner
     this.setupTerminal();
@@ -76,11 +82,11 @@ window.AisaHorizonApp = {
     // 14. Setup Global Keyboard Shortcuts
     this.setupKeybindings();
 
-    this.mascotSay('🌸 Harmony: Chào Sakura yêu dấu! Studio Horizon v2.0 đã sẵn sàng cùng cậu kiến tạo vũ trụ! ✨');
+    this.mascotSay('🌸 Harmony: Chào mừng Sakura trở lại AISA Horizon Studio! Tụi em đã nâng cấp đầy đủ toàn bộ tính năng rồi nè! ✨');
   },
 
   // ==========================================================================
-  // 1. TITLEBAR & WORKSPACE STATE
+  // 1. TITLEBAR & WORKSPACE CONTROLS
   // ==========================================================================
   setupTitlebarControls() {
     const btnMin = document.getElementById('btn-win-min');
@@ -100,15 +106,35 @@ window.AisaHorizonApp = {
           this.expandedFolders.clear();
           this.updateWorkspaceUI(newPath);
           await this.refreshFileTree();
-          await this.refreshGitStatus();
-          this.mascotSay(`Đã chuyển sang không gian: ${newPath.split(/[\\/]/).pop()} 📂`);
+          await this.loadGitRepos();
+          this.mascotSay(`Đã mở không gian làm việc: ${newPath.split(/[\\/]/).pop()} 📂`);
         }
       });
+    }
+
+    const btnTriggerQuickOpen = document.getElementById('btn-trigger-quick-open');
+    if (btnTriggerQuickOpen) {
+      btnTriggerQuickOpen.addEventListener('click', () => this.openQuickOpen());
     }
 
     const btnRunCode = document.getElementById('btn-run-code');
     if (btnRunCode) {
       btnRunCode.addEventListener('click', () => this.runActiveFile());
+    }
+
+    const btnToggleInline = document.getElementById('btn-toggle-inline-ai');
+    if (btnToggleInline) {
+      btnToggleInline.addEventListener('click', () => this.openInlineAI());
+    }
+
+    const btnToggleMascot = document.getElementById('btn-toggle-mascot');
+    const mascotWidget = document.getElementById('horizon-mascot-widget');
+    if (btnToggleMascot && mascotWidget) {
+      btnToggleMascot.addEventListener('click', () => {
+        const isHidden = mascotWidget.style.display === 'none';
+        mascotWidget.style.display = isHidden ? 'flex' : 'none';
+        btnToggleMascot.classList.toggle('active', isHidden);
+      });
     }
 
     const btnToggleCopilot = document.getElementById('btn-toggle-copilot');
@@ -120,6 +146,88 @@ window.AisaHorizonApp = {
         btnToggleCopilot.classList.toggle('active', isHidden);
       });
     }
+  },
+
+  setupDropdownMenus() {
+    const menus = [
+      { id: 'menu-file', dropdown: 'dropdown-file' },
+      { id: 'menu-edit', dropdown: 'dropdown-edit' },
+      { id: 'menu-selection', dropdown: 'dropdown-selection' },
+      { id: 'menu-view', dropdown: 'dropdown-view' },
+      { id: 'menu-terminal', dropdown: 'dropdown-terminal' },
+      { id: 'menu-copilot', dropdown: 'dropdown-agent' }
+    ];
+
+    const closeAllDropdowns = () => {
+      menus.forEach(m => {
+        const el = document.getElementById(m.dropdown);
+        if (el) el.style.display = 'none';
+      });
+    };
+
+    menus.forEach(m => {
+      const trigger = document.getElementById(m.id);
+      const dropdown = document.getElementById(m.dropdown);
+      if (trigger && dropdown) {
+        trigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isShown = dropdown.style.display === 'flex';
+          closeAllDropdowns();
+          dropdown.style.display = isShown ? 'none' : 'flex';
+        });
+      }
+    });
+
+    window.addEventListener('click', () => closeAllDropdowns());
+
+    // 1. Tệp Actions
+    document.getElementById('menu-action-new-file')?.addEventListener('click', () => this.createNewFilePrompt());
+    document.getElementById('menu-action-open-folder')?.addEventListener('click', () => document.getElementById('btn-change-workspace')?.click());
+    document.getElementById('menu-action-save')?.addEventListener('click', () => this.saveActiveFile());
+    document.getElementById('menu-action-save-all')?.addEventListener('click', () => this.saveAllFiles());
+    document.getElementById('menu-action-close-tab')?.addEventListener('click', () => {
+      if (this.activeTabPath) this.closeTab(this.activeTabPath);
+    });
+    document.getElementById('menu-action-exit')?.addEventListener('click', () => window.AisaHorizon?.closeWindow());
+
+    // 2. Chỉnh sửa Actions
+    document.getElementById('menu-action-undo')?.addEventListener('click', () => this.editor?.trigger('menu', 'undo'));
+    document.getElementById('menu-action-redo')?.addEventListener('click', () => this.editor?.trigger('menu', 'redo'));
+    document.getElementById('menu-action-cut')?.addEventListener('click', () => this.editor?.focus());
+    document.getElementById('menu-action-copy')?.addEventListener('click', () => this.editor?.focus());
+    document.getElementById('menu-action-paste')?.addEventListener('click', () => this.editor?.focus());
+    document.getElementById('menu-action-find')?.addEventListener('click', () => this.editor?.getAction('actions.find')?.run());
+    document.getElementById('menu-action-replace')?.addEventListener('click', () => this.editor?.getAction('editor.action.startFindReplaceAction')?.run());
+    document.getElementById('menu-action-format')?.addEventListener('click', () => this.editor?.getAction('editor.action.formatDocument')?.run());
+
+    // 3. Lựa chọn Actions
+    document.getElementById('menu-action-select-all')?.addEventListener('click', () => this.editor?.getAction('editor.action.selectAll')?.run());
+    document.getElementById('menu-action-expand-selection')?.addEventListener('click', () => this.editor?.getAction('editor.action.smartSelect.expand')?.run());
+
+    // 4. Xem Actions
+    document.getElementById('menu-action-view-explorer')?.addEventListener('click', () => document.getElementById('act-btn-explorer')?.click());
+    document.getElementById('menu-action-view-search')?.addEventListener('click', () => document.getElementById('act-btn-search')?.click());
+    document.getElementById('menu-action-view-git')?.addEventListener('click', () => document.getElementById('act-btn-git')?.click());
+    document.getElementById('menu-action-view-terminal')?.addEventListener('click', () => document.getElementById('act-btn-terminal')?.click());
+    document.getElementById('menu-action-view-copilot')?.addEventListener('click', () => document.getElementById('act-btn-copilot')?.click());
+    document.getElementById('menu-action-toggle-wrap')?.addEventListener('click', () => {
+      if (this.editor) {
+        const cur = this.editor.getOption(monaco.editor.EditorOption.wordWrap);
+        this.editor.updateOptions({ wordWrap: cur === 'on' ? 'off' : 'on' });
+      }
+    });
+
+    // 5. Terminal Actions
+    document.getElementById('menu-action-term-toggle')?.addEventListener('click', () => document.getElementById('act-btn-terminal')?.click());
+    document.getElementById('menu-action-term-clear')?.addEventListener('click', () => this.clearTerminal());
+    document.getElementById('menu-action-term-run')?.addEventListener('click', () => this.runActiveFile());
+
+    // 6. AI Agent Actions
+    document.getElementById('menu-action-agent-open')?.addEventListener('click', () => document.getElementById('act-btn-copilot')?.click());
+    document.getElementById('menu-action-agent-inline')?.addEventListener('click', () => this.openInlineAI());
+    document.getElementById('menu-action-agent-explain')?.addEventListener('click', () => this.triggerCodeAction('explain'));
+    document.getElementById('menu-action-agent-fix')?.addEventListener('click', () => this.triggerCodeAction('fix'));
+    document.getElementById('menu-action-agent-refactor')?.addEventListener('click', () => this.triggerCodeAction('refactor'));
   },
 
   updateWorkspaceUI(wsPath) {
@@ -209,7 +317,7 @@ window.AisaHorizonApp = {
     const actBtnSettings = document.getElementById('act-btn-settings');
     if (actBtnSettings) {
       actBtnSettings.addEventListener('click', () => {
-        const key = prompt('Cập nhật Google Gemini API Key cho Horizon Studio:', this.geminiKey || '');
+        const key = prompt('Cập nhật Google Gemini API Key cho AISA Horizon Studio:', this.geminiKey || '');
         if (key !== null) {
           this.geminiKey = key.trim();
           localStorage.setItem('mhent_ai_api_key', this.geminiKey);
@@ -220,7 +328,7 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 3. MONACO EDITOR SETUP & TABS
+  // 3. MONACO EDITOR & DIFF REVIEW INITIALIZATION
   // ==========================================================================
   initMonaco() {
     if (typeof require === 'undefined') {
@@ -231,6 +339,7 @@ window.AisaHorizonApp = {
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
 
     require(['vs/editor/editor.main'], () => {
+      // Define Celestial Theme
       monaco.editor.defineTheme('horizon-celestial', {
         base: 'vs-dark',
         inherit: true,
@@ -250,10 +359,13 @@ window.AisaHorizonApp = {
           'editorLineNumber.activeForeground': '#38bdf8',
           'editorCursor.foreground': '#ec4899',
           'editor.selectionBackground': '#38bdf833',
-          'editor.lineHighlightBackground': '#1e293b22'
+          'editor.lineHighlightBackground': '#1e293b22',
+          'diffEditor.insertedTextBackground': '#10b98122',
+          'diffEditor.removedTextBackground': '#ef444422'
         }
       });
 
+      // 1. Text Editor
       const container = document.getElementById('monaco-editor-instance');
       this.editor = monaco.editor.create(container, {
         value: '',
@@ -272,6 +384,17 @@ window.AisaHorizonApp = {
         wordWrap: 'off'
       });
 
+      // 2. Diff Editor
+      const diffContainer = document.getElementById('monaco-diff-editor-instance');
+      this.diffEditor = monaco.editor.createDiffEditor(diffContainer, {
+        theme: 'horizon-celestial',
+        fontFamily: "'JetBrains Mono', Consolas, monospace",
+        fontSize: 13,
+        automaticLayout: true,
+        readOnly: true,
+        renderSideBySide: true
+      });
+
       // Cursor position listener
       this.editor.onDidChangeCursorPosition((e) => {
         const posEl = document.getElementById('sb-cursor-pos');
@@ -287,14 +410,10 @@ window.AisaHorizonApp = {
         }
       });
 
-      // Add Monaco Actions for Shortcuts
-      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
-        this.openInlineAI();
-      });
-
-      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => {
-        this.openQuickOpen();
-      });
+      // Monaco Shortcuts
+      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => this.openInlineAI());
+      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => this.openQuickOpen());
+      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => this.saveActiveFile());
     });
   },
 
@@ -309,11 +428,14 @@ window.AisaHorizonApp = {
     return map[ext] || 'plaintext';
   },
 
+  // ==========================================================================
+  // 4. SMART FILE OPENING & MULTI-VIEWPORT (CODE, MEDIA, BINARY)
+  // ==========================================================================
   async openFile(filePath, lineNumber = null) {
     const existing = this.openTabs.find(t => t.path === filePath);
     if (existing) {
       this.switchTab(filePath);
-      if (lineNumber && this.editor) {
+      if (lineNumber && this.editor && !existing.isMedia && !existing.isBinary) {
         this.editor.revealLineInCenter(lineNumber);
         this.editor.setPosition({ lineNumber, column: 1 });
       }
@@ -327,27 +449,51 @@ window.AisaHorizonApp = {
       return;
     }
 
-    const lang = this.getLanguageFromExt(res.ext);
-    let model = null;
-    if (typeof monaco !== 'undefined') {
-      model = monaco.editor.createModel(res.content, lang);
-    }
+    let tab = null;
 
-    const tab = {
-      path: filePath,
-      name: res.name,
-      ext: res.ext,
-      lang: lang,
-      model: model,
-      content: res.content,
-      isDirty: false
-    };
+    if (res.isMedia) {
+      tab = {
+        path: filePath,
+        name: res.name,
+        ext: res.ext,
+        isMedia: true,
+        mediaType: res.mediaType,
+        url: res.url,
+        size: res.size,
+        isDirty: false
+      };
+    } else if (res.isBinary) {
+      tab = {
+        path: filePath,
+        name: res.name,
+        ext: res.ext,
+        isBinary: true,
+        size: res.size,
+        isDirty: false
+      };
+    } else {
+      // Text file
+      const lang = this.getLanguageFromExt(res.ext);
+      let model = null;
+      if (typeof monaco !== 'undefined') {
+        model = monaco.editor.createModel(res.content, lang);
+      }
+      tab = {
+        path: filePath,
+        name: res.name,
+        ext: res.ext,
+        lang: lang,
+        model: model,
+        content: res.content,
+        isDirty: false
+      };
+    }
 
     this.openTabs.push(tab);
     this.renderTabs();
     this.switchTab(filePath);
 
-    if (lineNumber && this.editor) {
+    if (lineNumber && this.editor && !tab.isMedia && !tab.isBinary) {
       this.editor.revealLineInCenter(lineNumber);
       this.editor.setPosition({ lineNumber, column: 1 });
     }
@@ -358,19 +504,161 @@ window.AisaHorizonApp = {
     if (!tab) return;
 
     this.activeTabPath = filePath;
+
+    // Elements
     const emptyState = document.getElementById('editor-empty-state');
+    const editorInstance = document.getElementById('monaco-editor-instance');
+    const diffInstance = document.getElementById('monaco-diff-editor-instance');
+    const mediaInstance = document.getElementById('media-viewer-instance');
+    const diffBar = document.getElementById('diff-floating-bar');
+
     if (emptyState) emptyState.style.display = 'none';
+    if (diffInstance) diffInstance.style.display = 'none';
+    if (diffBar) diffBar.style.display = 'none';
 
-    if (this.editor && tab.model) {
-      this.editor.setModel(tab.model);
-      this.editor.focus();
+    if (tab.isMedia) {
+      if (editorInstance) editorInstance.style.display = 'none';
+      if (mediaInstance) {
+        mediaInstance.style.display = 'flex';
+        this.renderMediaView(mediaInstance, tab);
+      }
+      document.getElementById('sb-lang-mode').textContent = tab.mediaType.toUpperCase();
+    } else if (tab.isBinary) {
+      if (editorInstance) editorInstance.style.display = 'none';
+      if (mediaInstance) {
+        mediaInstance.style.display = 'flex';
+        this.renderBinaryView(mediaInstance, tab);
+      }
+      document.getElementById('sb-lang-mode').textContent = 'BINARY';
+    } else {
+      // Regular code/text file
+      if (mediaInstance) mediaInstance.style.display = 'none';
+      if (editorInstance) {
+        editorInstance.style.display = 'block';
+        if (this.editor && tab.model) {
+          this.editor.setModel(tab.model);
+          this.editor.focus();
+        }
+      }
+      const langMode = document.getElementById('sb-lang-mode');
+      if (langMode) langMode.textContent = (tab.lang || 'plaintext').toUpperCase();
     }
-
-    const langMode = document.getElementById('sb-lang-mode');
-    if (langMode) langMode.textContent = tab.lang.toUpperCase();
 
     this.updateBreadcrumbs();
     this.renderTabs();
+  },
+
+  renderMediaView(container, tab) {
+    container.innerHTML = '';
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.gap = '14px';
+
+    if (tab.mediaType === 'video') {
+      wrapper.innerHTML = `
+        <video controls autoplay class="media-video-player" src="${tab.url}"></video>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px;">${tab.name} (${(tab.size / (1024 * 1024)).toFixed(2)} MB)</span>
+          <button type="button" class="binary-card-btn" id="btn-media-open-ext">🚀 Mở bằng trình phát ngoài</button>
+        </div>
+      `;
+    } else if (tab.mediaType === 'audio') {
+      wrapper.innerHTML = `
+        <div class="binary-card-box">
+          <div class="binary-card-icon">🎵</div>
+          <div class="binary-card-title">${tab.name}</div>
+          <audio controls autoplay class="media-audio-player" src="${tab.url}"></audio>
+          <div style="margin-top: 10px;">
+            <button type="button" class="binary-card-btn" id="btn-media-open-ext">🚀 Mở bằng ứng dụng hệ thống</button>
+          </div>
+        </div>
+      `;
+    } else if (tab.mediaType === 'image') {
+      wrapper.innerHTML = `
+        <img class="media-image-preview" src="${tab.url}" alt="${tab.name}">
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <span style="font-weight: 600; font-size: 12px; color: var(--text-dim);">${tab.name} (${(tab.size / 1024).toFixed(1)} KB)</span>
+          <button type="button" class="binary-card-btn" id="btn-media-open-ext">🚀 Mở xem ngoài</button>
+        </div>
+      `;
+    }
+
+    container.appendChild(wrapper);
+    wrapper.querySelector('#btn-media-open-ext')?.addEventListener('click', () => {
+      window.AisaHorizon?.openExternal(tab.path);
+    });
+  },
+
+  renderBinaryView(container, tab) {
+    container.innerHTML = `
+      <div class="binary-card-box">
+        <div class="binary-card-icon">📦</div>
+        <div class="binary-card-title">${tab.name}</div>
+        <div class="binary-card-desc">Tệp nhị phân (${(tab.size / 1024).toFixed(1)} KB) không thể xem hoặc chỉnh sửa dưới dạng văn bản trong Monaco Editor.</div>
+        <div class="binary-card-actions">
+          <button type="button" class="binary-card-btn" id="btn-bin-reveal">📂 Xem trong File Explorer</button>
+          <button type="button" class="binary-card-btn" id="btn-bin-open">🚀 Mở bằng ứng dụng hệ thống</button>
+        </div>
+      </div>
+    `;
+
+    container.querySelector('#btn-bin-reveal')?.addEventListener('click', () => {
+      window.AisaHorizon?.revealInExplorer(tab.path);
+    });
+    container.querySelector('#btn-bin-open')?.addEventListener('click', () => {
+      window.AisaHorizon?.openExternal(tab.path);
+    });
+  },
+
+  // ==========================================================================
+  // 5. ANTIGRAVITY DIFF REVIEW VIEW (VS CODE / ANTIGRAVITY STYLE)
+  // ==========================================================================
+  showDiffReview(fileName, originalText, modifiedText, onAccept, onReject = null) {
+    const editorInstance = document.getElementById('monaco-editor-instance');
+    const diffInstance = document.getElementById('monaco-diff-editor-instance');
+    const mediaInstance = document.getElementById('media-viewer-instance');
+    const diffBar = document.getElementById('diff-floating-bar');
+    const diffFilename = document.getElementById('diff-bar-filename');
+
+    if (editorInstance) editorInstance.style.display = 'none';
+    if (mediaInstance) mediaInstance.style.display = 'none';
+    if (diffInstance) diffInstance.style.display = 'block';
+    if (diffBar) diffBar.style.display = 'flex';
+    if (diffFilename) diffFilename.textContent = `Xem trước thay đổi: [${fileName}]`;
+
+    if (this.diffEditor) {
+      const ext = '.' + fileName.split('.').pop().toLowerCase();
+      const lang = this.getLanguageFromExt(ext);
+      const originalModel = monaco.editor.createModel(originalText, lang);
+      const modifiedModel = monaco.editor.createModel(modifiedText, lang);
+      this.diffEditor.setModel({ original: originalModel, modified: modifiedModel });
+    }
+
+    const btnAccept = document.getElementById('btn-diff-accept');
+    const btnReject = document.getElementById('btn-diff-reject');
+
+    const cleanup = () => {
+      if (diffInstance) diffInstance.style.display = 'none';
+      if (diffBar) diffBar.style.display = 'none';
+      if (editorInstance) editorInstance.style.display = 'block';
+      if (this.diffEditor) this.diffEditor.setModel(null);
+    };
+
+    if (btnAccept) {
+      btnAccept.onclick = () => {
+        cleanup();
+        if (typeof onAccept === 'function') onAccept();
+      };
+    }
+
+    if (btnReject) {
+      btnReject.onclick = () => {
+        cleanup();
+        if (typeof onReject === 'function') onReject();
+      };
+    }
   },
 
   async closeTab(filePath) {
@@ -388,8 +676,11 @@ window.AisaHorizonApp = {
       } else {
         this.activeTabPath = null;
         if (this.editor) this.editor.setModel(null);
-        const emptyState = document.getElementById('editor-empty-state');
-        if (emptyState) emptyState.style.display = 'flex';
+        document.getElementById('monaco-editor-instance').style.display = 'block';
+        document.getElementById('media-viewer-instance').style.display = 'none';
+        document.getElementById('monaco-diff-editor-instance').style.display = 'none';
+        document.getElementById('diff-floating-bar').style.display = 'none';
+        document.getElementById('editor-empty-state').style.display = 'flex';
         this.updateBreadcrumbs();
       }
     }
@@ -400,7 +691,7 @@ window.AisaHorizonApp = {
   async saveActiveFile() {
     if (!this.activeTabPath) return;
     const tab = this.openTabs.find(t => t.path === this.activeTabPath);
-    if (!tab || !this.editor) return;
+    if (!tab || tab.isMedia || tab.isBinary || !this.editor) return;
 
     const newContent = this.editor.getValue();
     const res = await window.AisaHorizon.writeFile(tab.path, newContent);
@@ -416,14 +707,34 @@ window.AisaHorizonApp = {
     }
   },
 
+  async saveAllFiles() {
+    let saved = 0;
+    for (const tab of this.openTabs) {
+      if (tab.isDirty && tab.model) {
+        const content = tab.model.getValue();
+        const res = await window.AisaHorizon.writeFile(tab.path, content);
+        if (res.success) {
+          tab.isDirty = false;
+          saved++;
+        }
+      }
+    }
+    this.renderTabs();
+    this.printTerminal(`✔ Đã lưu toàn bộ ${saved} tệp đang mở!`, '#10b981');
+    this.mascotSay(`🌸 Harmony: Đã lưu thành công tất cả các tệp rồi nha! ✨`);
+    this.refreshGitStatus();
+  },
+
   renderTabs() {
     const container = document.getElementById('editor-tabs-bar');
     if (!container) return;
 
     container.innerHTML = this.openTabs.map(t => {
       const isActive = t.path === this.activeTabPath;
+      const icon = t.isMedia ? (t.mediaType === 'video' ? '🎬' : t.mediaType === 'audio' ? '🎵' : '🖼️') : (t.isBinary ? '📦' : this.getFileIcon(t.name));
       return `
         <div class="editor-tab ${isActive ? 'active' : ''}" data-path="${t.path}">
+          <span>${icon}</span>
           <span>${t.name}${t.isDirty ? ' ●' : ''}</span>
           <span class="tab-close" data-close="${t.path}">×</span>
         </div>
@@ -448,7 +759,7 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 4. RECURSIVE FILE EXPLORER
+  // 6. RECURSIVE FILE EXPLORER
   // ==========================================================================
   async refreshFileTree() {
     const container = document.getElementById('file-tree-container');
@@ -468,35 +779,35 @@ window.AisaHorizonApp = {
       container.appendChild(el);
     }
 
-    // Bind Top Explorer Actions
+    // Top Explorer Buttons
     const btnNewFile = document.getElementById('btn-new-file');
-    if (btnNewFile) {
-      btnNewFile.onclick = async () => {
-        const name = prompt('Nhập tên tệp mới (ví dụ: test.js, style.css):');
-        if (name && name.trim()) {
-          const newPath = this.activeWorkspace + '\\' + name.trim();
-          await window.AisaHorizon.createFile(newPath);
-          await this.refreshFileTree();
-          await this.openFile(newPath);
-        }
-      };
-    }
+    if (btnNewFile) btnNewFile.onclick = () => this.createNewFilePrompt();
 
     const btnNewFolder = document.getElementById('btn-new-folder');
-    if (btnNewFolder) {
-      btnNewFolder.onclick = async () => {
-        const name = prompt('Nhập tên thư mục mới:');
-        if (name && name.trim()) {
-          const newPath = this.activeWorkspace + '\\' + name.trim();
-          await window.AisaHorizon.createDir(newPath);
-          await this.refreshFileTree();
-        }
-      };
-    }
+    if (btnNewFolder) btnNewFolder.onclick = () => this.createNewFolderPrompt();
 
     const btnRefresh = document.getElementById('btn-refresh-files');
-    if (btnRefresh) {
-      btnRefresh.onclick = () => this.refreshFileTree();
+    if (btnRefresh) btnRefresh.onclick = () => this.refreshFileTree();
+  },
+
+  async createNewFilePrompt(basePath = null) {
+    const name = prompt('Nhập tên tệp mới (ví dụ: test.js, styles.css):');
+    if (name && name.trim()) {
+      const base = basePath || this.activeWorkspace;
+      const newPath = base + '\\' + name.trim();
+      await window.AisaHorizon.createFile(newPath);
+      await this.refreshFileTree();
+      await this.openFile(newPath);
+    }
+  },
+
+  async createNewFolderPrompt(basePath = null) {
+    const name = prompt('Nhập tên thư mục mới:');
+    if (name && name.trim()) {
+      const base = basePath || this.activeWorkspace;
+      const newPath = base + '\\' + name.trim();
+      await window.AisaHorizon.createDir(newPath);
+      await this.refreshFileTree();
     }
   },
 
@@ -550,7 +861,6 @@ window.AisaHorizonApp = {
         }
       });
 
-      // Context menu
       row.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -567,9 +877,7 @@ window.AisaHorizonApp = {
         <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</span>
       `;
 
-      row.addEventListener('click', () => {
-        this.openFile(item.path);
-      });
+      row.addEventListener('click', () => this.openFile(item.path));
 
       row.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -588,13 +896,14 @@ window.AisaHorizonApp = {
     const map = {
       js: '🟨', mjs: '🟨', ts: '🟦', html: '🌐', css: '🎨', json: '📋',
       py: '🐍', md: '📝', bat: '⚡', ps1: '⚡', png: '🖼️',
-      jpg: '🖼️', svg: '✨', mp3: '🎵', wav: '🎵'
+      jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', svg: '✨', mp3: '🎵', wav: '🎵',
+      mp4: '🎬', webm: '🎬', mov: '🎬', zip: '📦', rar: '📦', exe: '⚙️'
     };
     return map[ext] || '📄';
   },
 
   // ==========================================================================
-  // 5. WORKSPACE SEARCH PANEL
+  // 7. WORKSPACE SEARCH PANEL
   // ==========================================================================
   setupSearchPanel() {
     const input = document.getElementById('workspace-search-input');
@@ -630,10 +939,10 @@ window.AisaHorizonApp = {
       if (resultsContainer) resultsContainer.innerHTML = '';
 
       if (!window.AisaHorizon) return;
-      const res = await window.AisaHorizon.searchFiles(q, {
+      const res = await window.AisaHorizon.searchFiles({
+        query: q,
         isCaseSensitive: this.searchFlags.isCase,
-        isRegex: this.searchFlags.isRegex,
-        maxResults: 150
+        isRegex: this.searchFlags.isRegex
       });
 
       if (!res.success) {
@@ -641,39 +950,31 @@ window.AisaHorizonApp = {
         return;
       }
 
-      if (res.matches.length === 0) {
+      if (!res.results || res.results.length === 0) {
         if (statusBar) statusBar.textContent = `Không tìm thấy kết quả nào cho "${q}"`;
         return;
       }
 
-      if (statusBar) statusBar.textContent = `Tìm thấy ${res.matches.length} kết quả`;
+      if (statusBar) statusBar.textContent = `Tìm thấy ${res.totalMatches || res.results.length} kết quả trong ${res.results.length} tệp`;
 
-      // Group by file
-      const groups = {};
-      res.matches.forEach(m => {
-        if (!groups[m.file]) groups[m.file] = [];
-        groups[m.file].push(m);
-      });
-
-      Object.keys(groups).forEach(filePath => {
+      res.results.forEach(fileResult => {
         const groupEl = document.createElement('div');
         groupEl.className = 'search-file-group';
 
-        const fileName = filePath.split(/[\\/]/).pop();
         const header = document.createElement('div');
         header.className = 'search-file-header';
-        header.innerHTML = `📄 ${fileName} <span style="color: var(--text-dim); font-size: 10px;">(${groups[filePath].length})</span>`;
+        header.innerHTML = `📄 ${fileResult.name} <span style="color: var(--text-dim); font-size: 10px;">(${fileResult.matches.length})</span>`;
         groupEl.appendChild(header);
 
-        groups[filePath].forEach(match => {
+        fileResult.matches.forEach(match => {
           const item = document.createElement('div');
           item.className = 'search-match-item';
           item.innerHTML = `
-            <span class="search-match-line">${match.line}:</span>
-            <span class="search-match-text">${this.escapeHtml(match.text.trim())}</span>
+            <span class="search-match-line">${match.lineNumber}:</span>
+            <span class="search-match-text">${this.escapeHtml(match.lineContent || '')}</span>
           `;
           item.addEventListener('click', () => {
-            this.openFile(filePath, match.line);
+            this.openFile(fileResult.fullPath, match.lineNumber);
           });
           groupEl.appendChild(item);
         });
@@ -688,14 +989,21 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 6. GIT SOURCE CONTROL PANEL
+  // 8. MULTI-REPO GIT SOURCE CONTROL
   // ==========================================================================
-  setupGitPanel() {
+  async setupGitPanel() {
     const btnRefresh = document.getElementById('btn-refresh-git');
     const btnCommit = document.getElementById('btn-git-commit');
     const btnPush = document.getElementById('btn-git-push');
+    const btnPull = document.getElementById('btn-git-pull');
+    const repoSelect = document.getElementById('git-repo-select');
 
     btnRefresh?.addEventListener('click', () => this.refreshGitStatus());
+
+    repoSelect?.addEventListener('change', () => {
+      this.selectedGitRepo = repoSelect.value;
+      this.refreshGitStatus();
+    });
 
     btnCommit?.addEventListener('click', async () => {
       const msgInput = document.getElementById('git-commit-msg');
@@ -705,8 +1013,8 @@ window.AisaHorizonApp = {
         return;
       }
 
-      this.printTerminal(`\n[Git] Đang commit với thông điệp: "${msg}"...`, '#a855f7');
-      const res = await window.AisaHorizon?.gitCommit(msg, this.activeWorkspace);
+      this.printTerminal(`\n[Git] Đang commit repo [${this.getRepoDisplayName()}]: "${msg}"...`, '#a855f7');
+      const res = await window.AisaHorizon?.gitCommit(this.selectedGitRepo, msg);
 
       if (res && res.success) {
         this.printTerminal(res.stdout || '✔ Commit thành công!', '#10b981');
@@ -719,22 +1027,61 @@ window.AisaHorizonApp = {
     });
 
     btnPush?.addEventListener('click', async () => {
-      this.printTerminal(`\n[Git] Đang đẩy lên remote repository (git push)...`, '#38bdf8');
-      const res = await window.AisaHorizon?.gitPush(this.activeWorkspace);
+      this.printTerminal(`\n[Git] Đang đẩy (git push) repo [${this.getRepoDisplayName()}]...`, '#38bdf8');
+      const res = await window.AisaHorizon?.gitPush(this.selectedGitRepo);
 
       if (res && res.success) {
-        this.printTerminal(res.stdout || '✔ Push thành công lên GitHub / Remote!', '#10b981');
+        this.printTerminal(res.stdout || '✔ Push thành công lên GitHub!', '#10b981');
         await this.refreshGitStatus();
         this.mascotSay('🌸 Harmony: Đã đồng bộ mã nguồn lên đám mây an toàn rồi nha Sakura! ✨');
       } else {
         this.printTerminal(res?.error || res?.stderr || 'Lỗi khi push git', '#ef4444');
       }
     });
+
+    btnPull?.addEventListener('click', async () => {
+      this.printTerminal(`\n[Git] Đang kéo (git pull) repo [${this.getRepoDisplayName()}]...`, '#a855f7');
+      const res = await window.AisaHorizon?.gitPull(this.selectedGitRepo);
+
+      if (res && res.success) {
+        this.printTerminal(res.stdout || '✔ Pull hoàn tất!', '#10b981');
+        await this.refreshFileTree();
+        await this.refreshGitStatus();
+      } else {
+        this.printTerminal(res?.error || res?.stderr || 'Lỗi khi pull git', '#ef4444');
+      }
+    });
+
+    await this.loadGitRepos();
+  },
+
+  getRepoDisplayName() {
+    if (!this.selectedGitRepo) return 'root';
+    return this.selectedGitRepo.split(/[\\/]/).pop();
+  },
+
+  async loadGitRepos() {
+    const repoSelect = document.getElementById('git-repo-select');
+    if (!repoSelect || !window.AisaHorizon) return;
+
+    const res = await window.AisaHorizon.getGitRepos();
+    if (res.success && res.repos.length > 0) {
+      this.gitRepos = res.repos;
+      repoSelect.innerHTML = res.repos.map(r => {
+        return `<option value="${r.path}">${r.name}</option>`;
+      }).join('');
+      this.selectedGitRepo = res.repos[0].path;
+      await this.refreshGitStatus();
+    } else {
+      repoSelect.innerHTML = `<option value="">(Không tìm thấy repo)</option>`;
+      this.selectedGitRepo = null;
+      await this.refreshGitStatus();
+    }
   },
 
   async refreshGitStatus() {
     if (!window.AisaHorizon) return;
-    const res = await window.AisaHorizon.gitStatus(this.activeWorkspace);
+    const res = await window.AisaHorizon.gitStatus(this.selectedGitRepo);
 
     const branchLabel = document.getElementById('git-branch-text');
     const sbBranchLabel = document.getElementById('sb-git-branch-name');
@@ -742,16 +1089,18 @@ window.AisaHorizonApp = {
     const badge = document.getElementById('git-changes-badge');
     const list = document.getElementById('git-changes-list');
 
-    if (!res.success) {
+    if (!res || !res.isGit) {
       if (branchLabel) branchLabel.textContent = 'Not a git repo';
+      if (sbBranchLabel) sbBranchLabel.textContent = 'no git';
       if (list) list.innerHTML = `<div style="padding: 10px; color: var(--text-dim); font-size: 11px;">Thư mục này chưa khởi tạo Git</div>`;
+      if (badge) badge.style.display = 'none';
       return;
     }
 
     if (branchLabel) branchLabel.textContent = res.branch || 'main';
-    if (sbBranchLabel) sbBranchLabel.textContent = res.branch || 'main';
+    if (sbBranchLabel) sbBranchLabel.textContent = `${this.getRepoDisplayName()}:${res.branch || 'main'}`;
 
-    const total = res.files.length;
+    const total = res.changes ? res.changes.length : 0;
     if (countTag) countTag.textContent = total;
     if (badge) {
       badge.textContent = total;
@@ -760,9 +1109,9 @@ window.AisaHorizonApp = {
 
     if (list) {
       if (total === 0) {
-        list.innerHTML = `<div style="padding: 12px; color: var(--text-dim); font-size: 11px; text-align: center;">Không có tệp nào thay đổi ✔</div>`;
+        list.innerHTML = `<div style="padding: 14px; color: var(--text-dim); font-size: 11px; text-align: center;">Không có tệp nào thay đổi ✔</div>`;
       } else {
-        list.innerHTML = res.files.map(f => {
+        list.innerHTML = res.changes.map(f => {
           let tagClass = 'modified';
           let tagText = 'M';
           if (f.status.includes('A')) { tagClass = 'added'; tagText = 'A'; }
@@ -770,16 +1119,28 @@ window.AisaHorizonApp = {
           else if (f.status.includes('?')) { tagClass = 'untracked'; tagText = 'U'; }
 
           return `
-            <div class="git-change-item" data-path="${f.path}">
-              <span class="git-change-name" title="${f.path}">${f.name}</span>
+            <div class="git-change-item" data-path="${f.fullPath}" data-status="${f.status}">
+              <span class="git-change-name" title="${f.fullPath}">${f.name}</span>
               <span class="git-status-tag ${tagClass}">${tagText}</span>
             </div>
           `;
         }).join('');
 
         list.querySelectorAll('.git-change-item').forEach(el => {
-          el.addEventListener('click', () => {
+          el.addEventListener('click', async () => {
             const p = el.getAttribute('data-path');
+            const status = el.getAttribute('data-status');
+
+            // If file is modified, show visual Git Diff in Monaco Diff Editor!
+            if (status.includes('M')) {
+              const diffRes = await window.AisaHorizon.gitDiff(this.selectedGitRepo, p);
+              if (diffRes && diffRes.success && diffRes.original) {
+                this.showDiffReview(p.split(/[\\/]/).pop(), diffRes.original, diffRes.working, () => {
+                  this.openFile(p);
+                });
+                return;
+              }
+            }
             this.openFile(p);
           });
         });
@@ -788,7 +1149,7 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 7. INTEGRATED POWERSHELL TERMINAL
+  // 9. INTEGRATED TERMINAL
   // ==========================================================================
   setupTerminal() {
     const input = document.getElementById('terminal-input');
@@ -835,7 +1196,7 @@ window.AisaHorizonApp = {
             if (res.stdout) this.printTerminal(res.stdout, '#cbd5e1');
             if (res.stderr) {
               this.printTerminal(res.stderr, '#f87171');
-              this.mascotSay('😈 Echo: Lệnh Terminal báo lỗi kìa Sakura ơi! Kiểm tra lại cú pháp xem sao! 😈');
+              this.mascotSay('😈 Echo: Terminal báo lỗi kìa Sakura ơi! Kiểm tra lại cú pháp xem sao! 😈');
             }
           }
         }
@@ -897,10 +1258,9 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 8. GOOGLE ANTIGRAVITY SIDECAR AGENT & MODES
+  // 10. GOOGLE ANTIGRAVITY SIDECAR AGENT & DIFF REVIEW
   // ==========================================================================
   setupAgentSidecar() {
-    // Mode Switcher: Agent | Chat | Review
     const modeTabs = document.querySelectorAll('.copilot-mode-tab');
     modeTabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -945,7 +1305,6 @@ window.AisaHorizonApp = {
     document.getElementById('btn-ai-refactor')?.addEventListener('click', () => this.triggerCodeAction('refactor'));
     document.getElementById('btn-ai-doc')?.addEventListener('click', () => this.triggerCodeAction('doc'));
 
-    // Context mention button
     document.getElementById('btn-add-context-mention')?.addEventListener('click', () => {
       const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
       const mention = currentTab ? `@${currentTab.name} ` : '@workspace ';
@@ -996,7 +1355,7 @@ window.AisaHorizonApp = {
     }
 
     const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
-    const fileContext = currentTab ? `\n[Tệp đang mở: ${currentTab.name} (${currentTab.path})]\n` : '';
+    const fileContext = currentTab && !currentTab.isMedia && !currentTab.isBinary ? `\n[Tệp đang mở: ${currentTab.name} (${currentTab.path})]\n` : '';
 
     let systemPrompt = '';
     if (this.currentMode === 'agent') {
@@ -1007,8 +1366,7 @@ window.AisaHorizonApp = {
 <thought>
 [Các bước suy nghĩ phân tích kiến trúc, rà soát logic, kế hoạch thực thi...]
 </thought>
-2. Sau thẻ thought, xuất các bước thao tác (ví dụ [Đọc tệp], [Sửa đổi], [Chạy Terminal]).
-3. Cuối cùng, đưa ra câu trả lời súc tích và đoạn mã hoàn thiện bằng tiếng Việt.`;
+2. Sau thẻ thought, xuất câu trả lời súc tích và đoạn mã hoàn thiện (trong khối markdown \`\`\`ngôn_ngữ ... \`\`\`) bằng tiếng Việt.`;
     } else if (this.currentMode === 'chat') {
       systemPrompt = `Bạn là hệ thống AI Duo Copilot (Harmony 🌸 & Echo 😈) trong Horizon IDE.
 - HARMONY 🌸: Dịu dàng, giải thích chi tiết, ân cần hướng dẫn logic.
@@ -1017,7 +1375,6 @@ Xuất định dạng:
 HARMONY: [Nội dung giải thích]
 ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     } else {
-      // Review mode
       systemPrompt = `Bạn là AI Code Reviewer. So sánh và xuất diff trước và sau khi tối ưu hóa hoặc chỉnh sửa mã nguồn. Sử dụng khối diff markdown.`;
     }
 
@@ -1038,7 +1395,6 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
       const rawOutput = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
       if (this.currentMode === 'agent') {
-        // Parse <thought> accordion
         const thoughtMatch = rawOutput.match(/<thought>([\s\S]*?)<\/thought>/i);
         const thoughtText = thoughtMatch ? thoughtMatch[1].trim() : 'Đã phân tích cấu trúc mã nguồn và ngữ cảnh tệp...';
         const finalAnswer = rawOutput.replace(/<thought>[\s\S]*?<\/thought>/i, '').trim();
@@ -1058,7 +1414,6 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
           this.appendAgentMessage('harmony', '🌸 Harmony', rawOutput);
         }
       } else {
-        // Review
         this.appendAgentMessage('harmony', '🔍 Code Review', rawOutput);
       }
 
@@ -1074,7 +1429,7 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     const bubble = document.createElement('div');
     bubble.className = 'copilot-msg-bubble harmony';
 
-    // Google Antigravity Accordion
+    // Accordion
     const accordion = document.createElement('details');
     accordion.className = 'thought-accordion';
     accordion.open = false;
@@ -1091,25 +1446,33 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     accordion.appendChild(content);
     bubble.appendChild(accordion);
 
-    // Final answer text
+    // Answer
     const answerEl = document.createElement('div');
     answerEl.style.whiteSpace = 'pre-wrap';
     answerEl.textContent = answerText;
     bubble.appendChild(answerEl);
 
-    // Apply Code button if code block exists
+    // If code exists, offer Antigravity Diff Review button
     const codeMatch = answerText.match(/```[a-z]*\n([\s\S]*?)```/i);
     if (codeMatch && codeMatch[1] && this.editor) {
-      const btnApply = document.createElement('button');
-      btnApply.className = 'copilot-action-btn';
-      btnApply.style.marginTop = '8px';
-      btnApply.style.color = '#38bdf8';
-      btnApply.innerHTML = '⚡ Áp dụng mã này vào Editor';
-      btnApply.onclick = () => {
-        this.editor.setValue(codeMatch[1].trim());
-        this.printTerminal('✔ Đã áp dụng mã từ Antigravity Agent vào Editor!', '#38bdf8');
+      const btnReview = document.createElement('button');
+      btnReview.className = 'copilot-action-btn';
+      btnReview.style.marginTop = '8px';
+      btnReview.style.color = '#38bdf8';
+      btnReview.innerHTML = '🔍 Xem trước thay đổi (Review Diff)';
+      btnReview.onclick = () => {
+        const curTab = this.openTabs.find(t => t.path === this.activeTabPath);
+        const fileName = curTab ? curTab.name : 'Untitled.js';
+        const originalCode = this.editor.getValue();
+        const proposedCode = codeMatch[1].trim();
+
+        this.showDiffReview(fileName, originalCode, proposedCode, () => {
+          this.editor.setValue(proposedCode);
+          this.saveActiveFile();
+          this.mascotSay('✔ Đã chấp nhận thay đổi mã nguồn từ Agent!');
+        });
       };
-      bubble.appendChild(btnApply);
+      bubble.appendChild(btnReview);
     }
 
     container.appendChild(bubble);
@@ -1153,7 +1516,7 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
   },
 
   // ==========================================================================
-  // 9. INLINE AI CODE GENERATOR (CTRL+K)
+  // 11. INLINE AI CODE GENERATOR (CTRL+K)
   // ==========================================================================
   setupInlineAI() {
     const widget = document.getElementById('inline-ai-widget');
@@ -1276,7 +1639,7 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
   },
 
   // ==========================================================================
-  // 10. QUICK OPEN MODAL (CTRL+P)
+  // 12. QUICK OPEN MODAL (CTRL+P) WITH KEYBOARD NAVIGATION
   // ==========================================================================
   setupQuickOpen() {
     const modal = document.getElementById('modal-quick-open');
@@ -1293,16 +1656,37 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     });
 
     input?.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        modal.style.display = 'none';
-        if (this.editor) this.editor.focus();
+      const items = results.querySelectorAll('.quick-open-item');
+      if (items.length === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this.quickOpenSelectedIndex = Math.min(this.quickOpenSelectedIndex + 1, items.length - 1);
+        this.updateQuickOpenHighlight(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.quickOpenSelectedIndex = Math.max(this.quickOpenSelectedIndex - 1, 0);
+        this.updateQuickOpenHighlight(items);
       } else if (e.key === 'Enter') {
-        const first = results.querySelector('.quick-open-item');
-        if (first) {
-          const p = first.getAttribute('data-path');
+        e.preventDefault();
+        const selected = items[this.quickOpenSelectedIndex];
+        if (selected) {
+          const p = selected.getAttribute('data-path');
           this.openFile(p);
           modal.style.display = 'none';
         }
+      } else if (e.key === 'Escape') {
+        modal.style.display = 'none';
+        if (this.editor) this.editor.focus();
+      }
+    });
+  },
+
+  updateQuickOpenHighlight(items) {
+    items.forEach((item, idx) => {
+      item.classList.toggle('selected', idx === this.quickOpenSelectedIndex);
+      if (idx === this.quickOpenSelectedIndex) {
+        item.scrollIntoView({ block: 'nearest' });
       }
     });
   },
@@ -1313,13 +1697,14 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     if (!modal) return;
 
     modal.style.display = 'flex';
+    this.quickOpenSelectedIndex = 0;
     if (input) {
       input.value = '';
       input.focus();
     }
 
     if (window.AisaHorizon) {
-      const res = await window.AisaHorizon.listAllFiles(this.activeWorkspace);
+      const res = await window.AisaHorizon.listAllFiles();
       if (res.success) {
         this.allWorkspaceFiles = res.files;
         this.filterQuickOpen('');
@@ -1332,21 +1717,22 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     if (!results) return;
 
     const filtered = this.allWorkspaceFiles.filter(f => {
-      return f.name.toLowerCase().includes(query) || f.path.toLowerCase().includes(query);
-    }).slice(0, 30);
+      return f.name.toLowerCase().includes(query) || (f.relativePath && f.relativePath.toLowerCase().includes(query));
+    }).slice(0, 40);
+
+    this.quickOpenSelectedIndex = 0;
 
     if (filtered.length === 0) {
       results.innerHTML = `<div style="padding: 10px; color: var(--text-dim); text-align: center; font-size: 11px;">Không tìm thấy tệp phù hợp</div>`;
       return;
     }
 
-    results.innerHTML = filtered.map(f => {
+    results.innerHTML = filtered.map((f, idx) => {
       const icon = this.getFileIcon(f.name);
-      const relPath = f.path.replace(this.activeWorkspace, '').replace(/^[\\/]/, '');
       return `
-        <div class="quick-open-item" data-path="${f.path}">
+        <div class="quick-open-item ${idx === 0 ? 'selected' : ''}" data-path="${f.fullPath}">
           <span class="quick-open-filename">${icon} ${f.name}</span>
-          <span class="quick-open-filepath">${relPath}</span>
+          <span class="quick-open-filepath">${f.relativePath || ''}</span>
         </div>
       `;
     }).join('');
@@ -1361,7 +1747,7 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
   },
 
   // ==========================================================================
-  // 11. FILE CONTEXT MENU
+  // 13. FILE CONTEXT MENU
   // ==========================================================================
   setupContextMenu() {
     const menu = document.getElementById('file-context-menu');
@@ -1370,30 +1756,23 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
       if (menu) menu.style.display = 'none';
     });
 
-    document.getElementById('ctx-new-file')?.addEventListener('click', async () => {
-      const name = prompt('Tên tệp mới:');
-      if (name && name.trim()) {
-        const base = this.selectedContextPath || this.activeWorkspace;
-        const newPath = base + '\\' + name.trim();
-        await window.AisaHorizon?.createFile(newPath);
-        await this.refreshFileTree();
-        await this.openFile(newPath);
-      }
+    document.getElementById('ctx-new-file')?.addEventListener('click', () => {
+      this.createNewFilePrompt(this.selectedContextPath);
     });
 
-    document.getElementById('ctx-new-folder')?.addEventListener('click', async () => {
-      const name = prompt('Tên thư mục mới:');
-      if (name && name.trim()) {
-        const base = this.selectedContextPath || this.activeWorkspace;
-        const newPath = base + '\\' + name.trim();
-        await window.AisaHorizon?.createDir(newPath);
-        await this.refreshFileTree();
-      }
+    document.getElementById('ctx-new-folder')?.addEventListener('click', () => {
+      this.createNewFolderPrompt(this.selectedContextPath);
     });
 
     document.getElementById('ctx-reveal-explorer')?.addEventListener('click', () => {
       if (this.selectedContextPath && window.AisaHorizon) {
         window.AisaHorizon.revealInExplorer(this.selectedContextPath);
+      }
+    });
+
+    document.getElementById('ctx-open-external')?.addEventListener('click', () => {
+      if (this.selectedContextPath && window.AisaHorizon) {
+        window.AisaHorizon.openExternal(this.selectedContextPath);
       }
     });
 
@@ -1441,13 +1820,13 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     if (!menu) return;
 
     this.selectedContextPath = targetPath;
-    menu.style.left = `${Math.min(x, window.innerWidth - 200)}px`;
-    menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
+    menu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 260)}px`;
     menu.style.display = 'flex';
   },
 
   // ==========================================================================
-  // 12. COMPANION MASCOT WIDGET (HARMONY 🌸 & ECHO 😈)
+  // 14. COMPANION MASCOT WIDGET (HARMONY 🌸 & ECHO 😈)
   // ==========================================================================
   setupMascotWidget() {
     const widget = document.getElementById('horizon-mascot-widget');
@@ -1457,13 +1836,15 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
 
     closeBtn?.addEventListener('click', () => {
       if (widget) widget.style.display = 'none';
+      document.getElementById('btn-toggle-mascot')?.classList.remove('active');
     });
 
     harmonyCard?.addEventListener('click', () => {
       const quotes = [
         '🌸 Harmony: Sakura cứ vững tâm code nhé, có em luôn ở đây hỗ trợ cậu! ✨',
         '🌸 Harmony: Đừng quên uống nước và chớp mắt nghỉ ngơi một chút nha cậu! 🍵',
-        '🌸 Harmony: Mã nguồn hôm nay viết rất đẹp và trong trẻo luôn đó Sakura! 💖'
+        '🌸 Harmony: Mã nguồn hôm nay viết rất đẹp và trong trẻo luôn đó Sakura! 💖',
+        '🌸 Harmony: Nếu gặp bug khó, cứ gọi tụi em phân tích chi tiết cho cậu nhé! 🌸'
       ];
       this.mascotSay(quotes[Math.floor(Math.random() * quotes.length)]);
     });
@@ -1472,7 +1853,8 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
       const quotes = [
         '😈 Echo: Nè, có đoạn nào khó quá thì gọi tôi, đừng có ngồi ngơ ra đó nha! 😈',
         '😈 Echo: Viết code phải có test đàng hoàng đấy nhé, tôi soi bug kỹ lắm đó! ⚡',
-        '😈 Echo: Hừm, cũng tạm được đấy, nhưng tôi tối ưu thì còn nhanh gấp đôi! 🚀'
+        '😈 Echo: Hừm, cũng tạm được đấy, nhưng tôi tối ưu thì còn nhanh gấp đôi! 🚀',
+        '😈 Echo: Lười gõ thì bấm Ctrl+K tôi viết cho, ở đó mà cắn móng tay! 😈'
       ];
       this.mascotSay(quotes[Math.floor(Math.random() * quotes.length)]);
     });
@@ -1483,13 +1865,13 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     if (balloon) {
       balloon.textContent = text;
       balloon.style.animation = 'none';
-      balloon.offsetHeight; // trigger reflow
+      balloon.offsetHeight;
       balloon.style.animation = 'fadeIn 0.2s ease';
     }
   },
 
   // ==========================================================================
-  // 13. GLOBAL KEYBOARD SHORTCUTS
+  // 15. GLOBAL KEYBOARD SHORTCUTS
   // ==========================================================================
   setupKeybindings() {
     window.addEventListener('keydown', (e) => {
@@ -1497,6 +1879,12 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         this.saveActiveFile();
+      }
+
+      // Ctrl + Shift + S (Save All)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        this.saveAllFiles();
       }
 
       // Ctrl + P (Quick Open)
