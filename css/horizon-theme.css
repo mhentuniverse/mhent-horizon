@@ -772,3 +772,947 @@ html, body {
 .statusbar-item:hover {
   color: var(--text-main);
 }
+
+/* ==========================================================================
+   5. ACTIVITY BAR ENHANCEMENTS & SUBPANELS
+   ========================================================================== */
+.activity-bar {
+  width: 48px;
+  background: var(--bg-activitybar);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  z-index: 20;
+}
+
+.activity-bar-top, .activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #ec4899;
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  box-shadow: 0 0 8px rgba(236, 72, 153, 0.6);
+}
+
+.sidebar-subpanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Tree Nested Items */
+.tree-arrow {
+  display: inline-block;
+  font-size: 9px;
+  width: 12px;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+  user-select: none;
+}
+.tree-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-folder-children {
+  display: flex;
+  flex-direction: column;
+  padding-left: 14px;
+}
+
+/* ==========================================================================
+   6. SEARCH SUBPANEL
+   ========================================================================== */
+.search-input-wrap {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-box-row {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 2px 6px;
+  gap: 4px;
+}
+
+.search-box-row:focus-within {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+}
+
+.search-input-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 4px;
+}
+
+.search-flag-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.search-flag-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.search-flag-btn.active {
+  color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.search-status-bar {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  padding: 0 2px;
+}
+
+.search-results-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.search-file-group {
+  margin-bottom: 8px;
+}
+
+.search-file-header {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--accent-blue);
+  font-weight: 600;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-match-item {
+  padding: 3px 12px 3px 22px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.12s ease;
+}
+
+.search-match-item:hover {
+  background: rgba(56, 189, 248, 0.1);
+  color: #ffffff;
+}
+
+.search-match-line {
+  color: var(--text-dim);
+  min-width: 24px;
+}
+
+.search-match-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   7. GIT SOURCE CONTROL SUBPANEL
+   ========================================================================== */
+.git-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.git-branch-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  border-radius: 6px;
+  color: #c084fc;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.git-commit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-commit-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  resize: vertical;
+  outline: none;
+}
+
+.git-commit-input:focus {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.2);
+}
+
+.git-commit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-git-action {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.btn-git-commit {
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(168, 85, 247, 0.3);
+}
+
+.btn-git-commit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.4);
+}
+
+.btn-git-push {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  max-width: 60px;
+}
+
+.btn-git-push:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--accent-blue);
+  color: #38bdf8;
+}
+
+.git-changes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 4px;
+}
+
+.git-count-tag {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+.git-changes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.git-change-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s ease;
+}
+
+.git-change-item:hover {
+  background: var(--bg-hover);
+}
+
+.git-change-name {
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-status-tag {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.git-status-tag.modified { color: #f59e0b; background: rgba(245, 158, 11, 0.15); }
+.git-status-tag.added { color: #10b981; background: rgba(16, 185, 129, 0.15); }
+.git-status-tag.deleted { color: #ef4444; background: rgba(239, 68, 68, 0.15); }
+.git-status-tag.untracked { color: #38bdf8; background: rgba(56, 189, 248, 0.15); }
+
+/* ==========================================================================
+   8. BREADCRUMBS PATH BAR
+   ========================================================================== */
+.editor-breadcrumbs {
+  height: 26px;
+  background: rgba(12, 14, 21, 0.95);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-body);
+  color: var(--text-dim);
+}
+
+.breadcrumb-item {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.breadcrumb-item:hover {
+  color: var(--text-main);
+}
+
+.breadcrumb-root {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.breadcrumb-sep {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.breadcrumb-active {
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   9. INLINE AI CODE GENERATOR (CTRL+K)
+   ========================================================================== */
+.inline-ai-widget {
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 85%;
+  max-width: 680px;
+  background: rgba(14, 16, 24, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(236, 72, 153, 0.35);
+  border-radius: 10px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6), 0 0 20px rgba(236, 72, 153, 0.2);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideDownIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDownIn {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.inline-ai-header {
+  padding: 8px 12px;
+  background: rgba(236, 72, 153, 0.08);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inline-ai-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  background: linear-gradient(90deg, #ec4899, #a855f7, #38bdf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.inline-ai-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.inline-ai-close:hover {
+  background: var(--bg-hover);
+  color: #ffffff;
+}
+
+.inline-ai-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inline-ai-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.inline-ai-input:focus {
+  border-color: var(--accent-pink);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.25);
+}
+
+.inline-ai-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inline-ai-badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-right: auto;
+}
+
+.btn-inline-submit, .btn-inline-accept, .btn-inline-reject {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.btn-inline-submit {
+  background: linear-gradient(135deg, #ec4899, #a855f7);
+  color: #ffffff;
+}
+.btn-inline-submit:hover {
+  box-shadow: 0 2px 10px rgba(236, 72, 153, 0.4);
+}
+
+.btn-inline-accept {
+  background: #10b981;
+  color: #000000;
+}
+.btn-inline-reject {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   10. ANTIGRAVITY AGENT MODE & THINKING PROCESS
+   ========================================================================== */
+.copilot-mode-tabs {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.copilot-mode-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copilot-mode-tab.active {
+  background: var(--accent-blue);
+  color: #000000;
+}
+
+.copilot-context-bar {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.context-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #38bdf8;
+  white-space: nowrap;
+}
+
+.context-add-btn {
+  background: transparent;
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.context-add-btn:hover {
+  border-color: var(--accent-purple);
+  color: var(--text-main);
+}
+
+/* Google Antigravity-style Collapsible Thinking Accordion */
+details.thought-accordion {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+details.thought-accordion[open] {
+  background: rgba(168, 85, 247, 0.06);
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+summary.thought-summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #c084fc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+summary.thought-summary:hover {
+  color: #e9d5ff;
+}
+
+.thought-content {
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #94a3b8;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: pre-wrap;
+}
+
+/* Tool execution badge */
+.tool-call-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  margin: 2px 0;
+}
+
+.tool-call-badge.read { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+.tool-call-badge.write { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+.tool-call-badge.terminal { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+/* Review / Diff Mode Container */
+.diff-inspector-container {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.diff-line-added {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  padding: 2px 6px;
+  border-left: 3px solid #10b981;
+}
+
+.diff-line-removed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  padding: 2px 6px;
+  border-left: 3px solid #ef4444;
+}
+
+/* ==========================================================================
+   11. FLOATING COMPANION MASCOT WIDGET (HARMONY & ECHO)
+   ========================================================================== */
+.horizon-mascot-widget {
+  position: absolute;
+  bottom: 35px;
+  right: 360px;
+  width: 280px;
+  background: rgba(13, 15, 23, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(236, 72, 153, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(236, 72, 153, 0.15);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: floatMascot 4s ease-in-out infinite alternate;
+}
+
+@keyframes floatMascot {
+  from { transform: translateY(0); }
+  to { transform: translateY(-6px); }
+}
+
+.mascot-widget-header {
+  padding: 6px 10px;
+  background: rgba(236, 72, 153, 0.08);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mascot-widget-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  color: #f472b6;
+}
+
+.mascot-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ec4899;
+  box-shadow: 0 0 8px #ec4899;
+}
+
+.mascot-widget-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.mascot-widget-stage {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mascot-duo-avatars-stage {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.mascot-chibi-card {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.mascot-chibi-card:hover {
+  transform: scale(1.06);
+}
+
+.mascot-chibi-card.harmony {
+  background: rgba(236, 72, 153, 0.1);
+  border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.mascot-chibi-card.echo {
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.mascot-chibi-emoji {
+  font-size: 24px;
+}
+
+.mascot-chibi-label {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.mascot-chibi-card.harmony .mascot-chibi-label { color: #f472b6; }
+.mascot-chibi-card.echo .mascot-chibi-label { color: #c084fc; }
+
+.mascot-dialogue-balloon {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-main);
+  text-align: center;
+  position: relative;
+}
+
+/* ==========================================================================
+   12. QUICK OPEN MODAL (CTRL+P)
+   ========================================================================== */
+.quick-open-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  padding-top: 60px;
+}
+
+.quick-open-modal {
+  width: 90%;
+  max-width: 600px;
+  max-height: 420px;
+  background: #0d0f17;
+  border: 1px solid var(--border-active);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.quick-open-input-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: 10px;
+}
+
+.quick-open-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+
+.quick-open-input-row kbd {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.quick-open-results-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quick-open-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.quick-open-item:hover, .quick-open-item.selected {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.quick-open-filename {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-open-filepath {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+/* ==========================================================================
+   13. RIGHT CLICK FILE CONTEXT MENU
+   ========================================================================== */
+.file-context-menu {
+  position: fixed;
+  background: #0f111a;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  z-index: 2000;
+  animation: fadeIn 0.12s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ctx-menu-item {
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.12s ease;
+}
+
+.ctx-menu-item:hover {
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--text-main);
+}
+
+.ctx-menu-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 3px 0;
+}
+
+.ctx-menu-item.ctx-danger {
+  color: #f87171;
+}
+
+.ctx-menu-item.ctx-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}

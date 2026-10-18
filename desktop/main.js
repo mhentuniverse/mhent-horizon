@@ -246,6 +246,136 @@ ipcMain.handle('horizon:delete-path', async (event, targetPath) => {
   }
 });
 
+ipcMain.handle('horizon:rename-path', async (event, { oldPath, newPath }) => {
+  try {
+    const from = path.resolve(oldPath);
+    const to = path.resolve(newPath);
+    if (!fs.existsSync(from)) return { success: false, error: 'Tệp gốc không tồn tại' };
+    await fsPromises.rename(from, to);
+    return { success: true, path: to };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('horizon:reveal-in-explorer', (event, targetPath) => {
+  try {
+    const full = path.resolve(targetPath);
+    shell.showItemInFolder(full);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Helper for recursive file traversal (ignoring heavy/hidden folders)
+async function getAllWorkspaceFiles(dir, maxDepth = 6, currentDepth = 0) {
+  if (currentDepth > maxDepth) return [];
+  let results = [];
+  try {
+    const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      if (ent.name === '.git' || ent.name === 'node_modules' || ent.name === 'dist' || ent.name === '.gemini' || ent.name === '$RECYCLE.BIN') continue;
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        const sub = await getAllWorkspaceFiles(full, maxDepth, currentDepth + 1);
+        results = results.concat(sub);
+      } else {
+        results.push(full);
+      }
+    }
+  } catch (e) {}
+  return results;
+}
+
+ipcMain.handle('horizon:list-all-files', async () => {
+  try {
+    const all = await getAllWorkspaceFiles(activeWorkspacePath);
+    const rels = all.map(f => ({
+      fullPath: f,
+      relativePath: path.relative(activeWorkspacePath, f),
+      name: path.basename(f),
+      ext: path.extname(f).toLowerCase()
+    }));
+    return { success: true, files: rels };
+  } catch (err) {
+    return { success: false, error: err.message, files: [] };
+  }
+});
+
+// Global Text Search across Workspace Files (ripgrep-like search)
+ipcMain.handle('horizon:search-files', async (event, { query, isRegex = false, caseSensitive = false }) => {
+  if (!query || !query.trim()) return { success: true, results: [] };
+  try {
+    const files = await getAllWorkspaceFiles(activeWorkspacePath);
+    const binaryExts = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.rar', '.exe', '.dll', '.mp4', '.mp3', '.wav', '.woff', '.woff2', '.ttf']);
+    const results = [];
+    let regex = null;
+
+    if (isRegex) {
+      try {
+        regex = new RegExp(query, caseSensitive ? 'g' : 'gi');
+      } catch (e) {
+        return { success: false, error: 'Biểu thức chính quy không hợp lệ' };
+      }
+    }
+
+    let matchCount = 0;
+    const maxMatches = 150;
+
+    for (const file of files) {
+      if (matchCount >= maxMatches) break;
+      const ext = path.extname(file).toLowerCase();
+      if (binaryExts.has(ext)) continue;
+
+      try {
+        const stat = await fsPromises.stat(file);
+        if (stat.size > 2 * 1024 * 1024) continue; // Skip files > 2MB
+
+        const content = await fsPromises.readFile(file, 'utf-8');
+        const lines = content.split(/\r?\n/);
+        const fileMatches = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          let matched = false;
+
+          if (regex) {
+            regex.lastIndex = 0;
+            matched = regex.test(line);
+          } else {
+            const haystack = caseSensitive ? line : line.toLowerCase();
+            const needle = caseSensitive ? query : query.toLowerCase();
+            matched = haystack.includes(needle);
+          }
+
+          if (matched) {
+            fileMatches.push({
+              lineNumber: i + 1,
+              lineContent: line.trim()
+            });
+            matchCount++;
+            if (matchCount >= maxMatches) break;
+          }
+        }
+
+        if (fileMatches.length > 0) {
+          results.push({
+            fullPath: file,
+            relativePath: path.relative(activeWorkspacePath, file),
+            name: path.basename(file),
+            matches: fileMatches
+          });
+        }
+      } catch (err) {}
+    }
+
+    return { success: true, results, totalMatches: matchCount };
+  } catch (err) {
+    return { success: false, error: err.message, results: [] };
+  }
+});
+
 // ============================================================================
 // 3. INTEGRATED TERMINAL EXECUTION (POWERSHELL / CMD)
 // ============================================================================
@@ -258,7 +388,7 @@ ipcMain.handle('horizon:run-command', async (event, { command, cwd = null }) => 
         cwd: targetCwd,
         maxBuffer: 15 * 1024 * 1024,
         shell: 'powershell.exe',
-        timeout: 60000
+        timeout: 90000
       },
       (error, stdout, stderr) => {
         resolve({
@@ -274,7 +404,61 @@ ipcMain.handle('horizon:run-command', async (event, { command, cwd = null }) => 
 });
 
 // ============================================================================
-// 4. API KEYS & COPILOT CORE
+// 4. GIT SOURCE CONTROL OPERATIONS
+// ============================================================================
+ipcMain.handle('horizon:git-status', async () => {
+  return new Promise((resolve) => {
+    exec('git rev-parse --abbrev-ref HEAD', { cwd: activeWorkspacePath }, (err1, stdout1) => {
+      if (err1) {
+        return resolve({ isGit: false, branch: '', changes: [] });
+      }
+      const branch = (stdout1 || '').trim();
+      exec('git status --porcelain', { cwd: activeWorkspacePath }, (err2, stdout2) => {
+        const changes = [];
+        const lines = (stdout2 || '').split('\n').filter(l => l.trim());
+        for (const line of lines) {
+          const status = line.slice(0, 2).trim();
+          const file = line.slice(3).trim();
+          changes.push({
+            status,
+            file,
+            name: path.basename(file),
+            fullPath: path.resolve(activeWorkspacePath, file)
+          });
+        }
+        resolve({ isGit: true, branch, changes });
+      });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-commit', async (event, message) => {
+  const safeMsg = (message || 'update').replace(/"/g, '\\"');
+  return new Promise((resolve) => {
+    exec(`git add -A; git commit -m "${safeMsg}"`, { cwd: activeWorkspacePath, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+      resolve({
+        success: !err,
+        stdout: stdout || '',
+        stderr: stderr || (err ? err.message : '')
+      });
+    });
+  });
+});
+
+ipcMain.handle('horizon:git-push', async () => {
+  return new Promise((resolve) => {
+    exec('git push', { cwd: activeWorkspacePath, shell: 'powershell.exe' }, (err, stdout, stderr) => {
+      resolve({
+        success: !err,
+        stdout: stdout || '',
+        stderr: stderr || (err ? err.message : '')
+      });
+    });
+  });
+});
+
+// ============================================================================
+// 5. API KEYS & COPILOT CORE
 // ============================================================================
 ipcMain.handle('horizon:get-api-key', () => {
   return getApiKey();

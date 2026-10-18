@@ -5,9 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AISA Horizon — AI-First IDE Studio | MHEnt Universe</title>
   <link rel="icon" type="image/png" href="assets/horizon-logo.png">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Horizon Master CSS -->
   <link rel="stylesheet" href="css/horizon-theme.css">
   
-  <!-- Monaco Editor AMD Loader from CDN with offline fallback -->
+  <!-- Monaco Editor AMD Loader with fallback -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
 </head>
 <body>
@@ -20,23 +27,30 @@
       <div class="titlebar-brand">
         <img src="assets/horizon-logo.png" alt="AISA Horizon Logo" class="titlebar-logo">
         <span class="titlebar-title">AISA HORIZON</span>
-        <span class="titlebar-badge">IDE v1.0</span>
+        <span class="titlebar-badge">IDE v2.0 PRO</span>
       </div>
 
       <nav class="titlebar-menu">
         <div class="menu-item" id="menu-file">Tệp</div>
         <div class="menu-item" id="menu-edit">Chỉnh sửa</div>
+        <div class="menu-item" id="menu-selection">Lựa chọn</div>
         <div class="menu-item" id="menu-view">Xem</div>
         <div class="menu-item" id="menu-terminal">Terminal</div>
-        <div class="menu-item" id="menu-copilot">Copilot</div>
+        <div class="menu-item" id="menu-copilot">AI Agent</div>
       </nav>
     </div>
 
     <div class="titlebar-center">
-      <div class="workspace-pill" id="btn-change-workspace" title="Nhấp để đổi thư mục dự án">
+      <div class="workspace-pill" id="btn-change-workspace" title="Nhấp để đổi thư mục dự án (Ctrl+O)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         <span id="active-workspace-name">MHEnt. Universe</span>
         <kbd>Ctrl+O</kbd>
+      </div>
+
+      <div class="quick-open-pill" id="btn-trigger-quick-open" title="Tìm nhanh tệp trong dự án (Ctrl+P)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>Tìm nhanh tệp...</span>
+        <kbd>Ctrl+P</kbd>
       </div>
     </div>
 
@@ -46,12 +60,25 @@
         <span>Chạy Code</span>
       </button>
 
-      <button type="button" class="action-pill-btn" id="btn-toggle-copilot" title="Bật/Tắt AI Copilot Duo">
-        <span style="color: #ec4899;">🌸</span>
-        <span style="color: #a855f7;">😈</span>
-        <span>Copilot</span>
+      <!-- Toggle Inline AI Bar (Ctrl+K) -->
+      <button type="button" class="action-pill-btn" id="btn-toggle-inline-ai" title="Tạo code / Sửa bằng AI tại chỗ (Ctrl+K)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        <span>Inline AI</span>
+        <kbd>Ctrl+K</kbd>
       </button>
 
+      <!-- Toggle Mascot Companion -->
+      <button type="button" class="action-pill-btn active" id="btn-toggle-mascot" title="Bật/Tắt Mascot Đồng hành (Harmony 🌸 & Echo 😈)">
+        <span>🌸😈 Mascot</span>
+      </button>
+
+      <!-- Toggle Copilot Panel -->
+      <button type="button" class="action-pill-btn active" id="btn-toggle-copilot" title="Bật/Tắt AI Agent Sidecar (Ctrl+Shift+I)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+        <span>Agent</span>
+      </button>
+
+      <!-- Window Controls -->
       <div class="window-controls">
         <button type="button" class="win-btn" id="btn-win-min" title="Thu nhỏ">
           <svg width="10" height="2" viewBox="0 0 10 2"><rect width="10" height="2" fill="currentColor"/></svg>
@@ -70,42 +97,124 @@
        2. MAIN WORKSPACE BODY
        ======================================================================== -->
   <div class="horizon-body">
-    <!-- Activity Bar -->
+    <!-- Activity Bar on the far left -->
     <aside class="activity-bar">
-      <button type="button" class="activity-btn active" id="act-btn-explorer" title="Quản lý Tệp (Ctrl+Shift+E)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      </button>
-      <button type="button" class="activity-btn" id="act-btn-terminal" title="Terminal Tích hợp (Ctrl+`)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-      </button>
-      <button type="button" class="activity-btn" id="act-btn-copilot" title="AISA Copilot Duo (Ctrl+Shift+I)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg>
-      </button>
+      <div class="activity-bar-top">
+        <button type="button" class="activity-btn active" id="act-btn-explorer" title="Quản lý Tệp (Ctrl+Shift+E)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </button>
+        <button type="button" class="activity-btn" id="act-btn-search" title="Tìm kiếm trong Dự án (Ctrl+Shift+F)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <button type="button" class="activity-btn" id="act-btn-git" title="Quản lý Source Control Git (Ctrl+Shift+G)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+          <span class="activity-badge" id="git-changes-badge" style="display: none;">0</span>
+        </button>
+        <button type="button" class="activity-btn" id="act-btn-terminal" title="Terminal Tích hợp (Ctrl+`)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </button>
+        <button type="button" class="activity-btn" id="act-btn-copilot" title="AISA Copilot & Agent (Ctrl+Shift+I)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg>
+        </button>
+      </div>
+
+      <div class="activity-bar-bottom">
+        <button type="button" class="activity-btn" id="act-btn-settings" title="Cài đặt & Tùy biến Horizon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
     </aside>
 
-    <!-- File Explorer Sidebar -->
+    <!-- Sidebar Multi-panel View (Explorer, Search, Git) -->
     <aside class="horizon-sidebar" id="horizon-sidebar">
-      <div class="sidebar-header">
-        <span id="sidebar-workspace-label">KHÔNG GIAN LÀM VIỆC</span>
-        <div class="sidebar-actions">
-          <button type="button" class="sidebar-action-btn" id="btn-new-file" title="Tạo tệp mới">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
-          </button>
-          <button type="button" class="sidebar-action-btn" id="btn-new-folder" title="Tạo thư mục mới">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
-          </button>
-          <button type="button" class="sidebar-action-btn" id="btn-refresh-files" title="Làm mới (F5)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          </button>
+      
+      <!-- Panel 1: File Explorer -->
+      <div class="sidebar-subpanel" id="panel-explorer">
+        <div class="sidebar-header">
+          <span id="sidebar-workspace-label">KHÔNG GIAN LÀM VIỆC</span>
+          <div class="sidebar-actions">
+            <button type="button" class="sidebar-action-btn" id="btn-new-file" title="Tạo tệp mới">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            </button>
+            <button type="button" class="sidebar-action-btn" id="btn-new-folder" title="Tạo thư mục mới">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            </button>
+            <button type="button" class="sidebar-action-btn" id="btn-refresh-files" title="Làm mới (F5)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="file-tree-container" id="file-tree-container">
+          <!-- Recursive nested tree dynamically rendered by JS -->
         </div>
       </div>
-      <div class="file-tree-container" id="file-tree-container">
-        <!-- Dynamic Tree Items Injected by JS -->
+
+      <!-- Panel 2: Workspace Search -->
+      <div class="sidebar-subpanel" id="panel-search" style="display: none;">
+        <div class="sidebar-header">
+          <span>TÌM KIẾM DỰ ÁN</span>
+          <div class="sidebar-actions">
+            <button type="button" class="sidebar-action-btn" id="btn-clear-search" title="Xóa tìm kiếm">✕</button>
+          </div>
+        </div>
+        <div class="search-input-wrap">
+          <div class="search-box-row">
+            <input type="text" id="workspace-search-input" class="search-input-field" placeholder="Tìm kiếm text hoặc regex (Enter)...">
+            <button type="button" class="search-flag-btn" id="btn-flag-case" title="Phân biệt hoa/thường (Aa)">Aa</button>
+            <button type="button" class="search-flag-btn" id="btn-flag-regex" title="Biểu thức chính quy (.*)">.*</button>
+          </div>
+          <div class="search-status-bar" id="search-status-bar">Nhập từ khóa và bấm Enter</div>
+        </div>
+        <div class="search-results-container" id="search-results-container">
+          <!-- Grouped file matches injected by JS -->
+        </div>
       </div>
+
+      <!-- Panel 3: Git Source Control -->
+      <div class="sidebar-subpanel" id="panel-git" style="display: none;">
+        <div class="sidebar-header">
+          <span>SOURCE CONTROL</span>
+          <div class="sidebar-actions">
+            <button type="button" class="sidebar-action-btn" id="btn-refresh-git" title="Làm mới trạng thái Git">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="git-panel-content">
+          <div class="git-branch-indicator" id="git-active-branch-pill">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            <span id="git-branch-text">main</span>
+          </div>
+
+          <div class="git-commit-box">
+            <textarea class="git-commit-input" id="git-commit-msg" placeholder="Thông điệp commit (ví dụ: feat: hoàn thiện AISA Horizon)..." rows="2"></textarea>
+            <div class="git-commit-actions">
+              <button type="button" class="btn-git-action btn-git-commit" id="btn-git-commit">✔ Commit</button>
+              <button type="button" class="btn-git-action btn-git-push" id="btn-git-push" title="Đẩy lên remote repository">↑ Push</button>
+            </div>
+          </div>
+
+          <div class="git-changes-header">
+            <span>CÁC TỆP ĐÃ THAY ĐỔI</span>
+            <span class="git-count-tag" id="git-changes-count">0</span>
+          </div>
+          <div class="git-changes-list" id="git-changes-list">
+            <!-- Changed files list injected by JS -->
+          </div>
+        </div>
+      </div>
+
     </aside>
 
-    <!-- Center: Monaco Editor & Terminal -->
+    <!-- Center Area: Monaco Editor & Terminal -->
     <main class="horizon-center-area">
+      <!-- Breadcrumbs Path Bar -->
+      <div class="editor-breadcrumbs" id="editor-breadcrumbs">
+        <span class="breadcrumb-item breadcrumb-root">MHEnt Workspace</span>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-item breadcrumb-active" id="breadcrumb-current-file">Chưa mở tệp</span>
+      </div>
+
       <!-- Tabs Bar -->
       <div class="editor-tabs-bar" id="editor-tabs-bar">
         <!-- Dynamic Tabs Injected by JS -->
@@ -114,13 +223,37 @@
       <!-- Monaco Editor Viewport -->
       <div class="monaco-wrapper" id="monaco-wrapper">
         <div id="monaco-editor-instance"></div>
+
+        <!-- Inline AI Code Generator (Ctrl+K) -->
+        <div class="inline-ai-widget" id="inline-ai-widget" style="display: none;">
+          <div class="inline-ai-header">
+            <div class="inline-ai-title">
+              <span class="ai-sparkle">✨</span>
+              <span>AISA Inline Generator (Harmony 🌸 & Echo 😈)</span>
+            </div>
+            <button type="button" class="inline-ai-close" id="btn-close-inline-ai">✕</button>
+          </div>
+          <div class="inline-ai-body">
+            <input type="text" class="inline-ai-input" id="inline-ai-input" placeholder="Mô tả mã muốn tạo hoặc cách chỉnh sửa đoạn code này (Enter để sinh mã)...">
+            <div class="inline-ai-tools">
+              <span class="inline-ai-badge" id="inline-ai-status">Sẵn sàng</span>
+              <button type="button" class="btn-inline-submit" id="btn-inline-generate">Sinh mã ⚡</button>
+              <button type="button" class="btn-inline-accept" id="btn-inline-accept" style="display: none;">Chấp nhận ✔</button>
+              <button type="button" class="btn-inline-reject" id="btn-inline-reject" style="display: none;">Hủy bỏ ✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
         <div class="editor-empty-state" id="editor-empty-state">
           <img src="assets/horizon-logo.png" alt="AISA Horizon Logo" class="editor-empty-logo">
           <h2>AISA Horizon Studio</h2>
-          <p>Mở một tệp từ cây thư mục bên trái để bắt đầu lập trình cùng Harmony 🌸 & Echo 😈</p>
-          <div style="display: flex; gap: 8px; margin-top: 6px;">
-            <kbd>Ctrl + S</kbd><span>Lưu tệp</span>
-            <kbd>Ctrl + `</kbd><span>Bật Terminal</span>
+          <p>Mở một tệp từ cây thư mục bên trái hoặc bấm phím tắt để bắt đầu lập trình cùng Harmony 🌸 & Echo 😈</p>
+          <div class="empty-state-shortcuts">
+            <div class="shortcut-pill"><kbd>Ctrl + P</kbd><span>Tìm nhanh tệp</span></div>
+            <div class="shortcut-pill"><kbd>Ctrl + K</kbd><span>Tạo code bằng AI</span></div>
+            <div class="shortcut-pill"><kbd>Ctrl + `</kbd><span>Bật Terminal</span></div>
+            <div class="shortcut-pill"><kbd>F5</kbd><span>Chạy tệp hiện tại</span></div>
           </div>
         </div>
       </div>
@@ -129,7 +262,7 @@
       <div class="terminal-panel" id="terminal-panel">
         <div class="terminal-header">
           <div class="terminal-tabs">
-            <span class="terminal-tab-btn">⚡ POWERSHELL CONSOLE</span>
+            <span class="terminal-tab-btn active">⚡ POWERSHELL CONSOLE</span>
             <span id="terminal-cwd-label" style="color: var(--text-dim); font-size: 10.5px;"></span>
           </div>
           <div class="terminal-actions">
@@ -142,7 +275,7 @@
           </div>
         </div>
         <div class="terminal-body" id="terminal-output-container">
-          <div style="color: #64748b;">[AISA Horizon Native PowerShell Shell v1.0 Ready]</div>
+          <div style="color: #64748b;">[AISA Horizon Native PowerShell Shell v2.0 Ready]</div>
         </div>
         <div class="terminal-input-bar">
           <span class="terminal-prompt-symbol">&gt;</span>
@@ -151,22 +284,31 @@
       </div>
     </main>
 
-    <!-- Right: AISA Copilot Duo (Harmony & Echo) -->
+    <!-- Right Sidecar: Google Antigravity-style AI Agent & Copilot -->
     <aside class="horizon-copilot-panel" id="horizon-copilot-panel">
+      <!-- Copilot Header with Mode Switcher -->
       <div class="copilot-header">
         <div class="copilot-duo-brand">
           <div class="copilot-duo-avatars">
             <div class="copilot-avatar-mini harmony">🌸</div>
             <div class="copilot-avatar-mini echo">😈</div>
           </div>
-          <span class="copilot-title">AISA Duo Copilot</span>
+          <span class="copilot-title">AISA AI Studio</span>
         </div>
+
+        <!-- Antigravity Mode Tabs: Agent | Chat | Changes -->
+        <div class="copilot-mode-tabs">
+          <button type="button" class="copilot-mode-tab active" data-mode="agent" title="Chế độ Tự động Thực thi (Agent)">Agent</button>
+          <button type="button" class="copilot-mode-tab" data-mode="chat" title="Hỏi đáp & Lập trình Cặp (Chat)">Chat</button>
+          <button type="button" class="copilot-mode-tab" data-mode="review" title="Xem trước Thay đổi Mã (Review Diff)">Review</button>
+        </div>
+
         <button type="button" class="sidebar-action-btn" id="btn-clear-copilot" title="Làm sạch hội thoại Copilot">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>
 
-      <!-- Quick AI Actions on active code -->
+      <!-- Quick AI Actions -->
       <div class="copilot-quick-actions">
         <button type="button" class="copilot-action-btn" id="btn-ai-explain">
           <span>🔍</span> Giải thích code
@@ -178,7 +320,7 @@
           <span>⚡</span> Tối ưu (Refactor)
         </button>
         <button type="button" class="copilot-action-btn" id="btn-ai-doc">
-          <span>📝</span> Viết chú thích
+          <span>📝</span> Viết JSDoc
         </button>
       </div>
 
@@ -186,28 +328,108 @@
       <div class="copilot-messages-container" id="copilot-messages">
         <div class="copilot-msg-bubble harmony">
           <div class="copilot-speaker-tag harmony">🌸 Harmony</div>
-          <div>Chào Sakura yêu quý! Em và Echo đã sẵn sàng đồng hành cùng cậu kiến tạo dự án hôm nay. Cậu cứ code tự nhiên, cần hỗ trợ gì cứ gọi tụi em nhé!</div>
+          <div>Chào Sakura yêu quý! Em và Echo đã sẵn sàng đồng hành cùng cậu kiến tạo dự án hôm nay. Cậu cứ code tự nhiên, cần viết tính năng mới, gỡ bug hay refactor cứ giao cho tụi em nhé! ✨</div>
         </div>
+      </div>
+
+      <!-- Context Chips Strip -->
+      <div class="copilot-context-bar" id="copilot-context-bar">
+        <span class="context-pill" id="context-pill-active-file" title="Tệp đang mở tự động đính kèm">
+          📄 <span id="context-active-filename">Chưa chọn tệp</span>
+        </span>
+        <button type="button" class="context-add-btn" id="btn-add-context-mention" title="Thêm ngữ cảnh (@)">
+          + @ Ngữ cảnh
+        </button>
       </div>
 
       <!-- Copilot Input Bar -->
       <div class="copilot-input-wrap">
         <div class="copilot-input-box">
-          <input type="text" class="copilot-input" id="copilot-input" placeholder="Hỏi Harmony & Echo về code của cậu...">
-          <button type="button" class="copilot-send-btn" id="btn-copilot-send" title="Gửi câu hỏi (Enter)">↑</button>
+          <textarea class="copilot-input" id="copilot-input" placeholder="Hỏi hoặc giao việc cho Harmony & Echo (Gõ @ để gắn file)..." rows="2"></textarea>
+          <button type="button" class="copilot-send-btn" id="btn-copilot-send" title="Gửi yêu cầu (Enter)">↑</button>
         </div>
       </div>
     </aside>
   </div>
 
   <!-- ========================================================================
-       3. STATUS BAR (BOTTOM)
+       3. FLOATING COMPANION MASCOT WIDGET (HARMONY 🌸 & ECHO 😈)
+       ======================================================================== -->
+  <aside class="horizon-mascot-widget" id="horizon-mascot-widget">
+    <div class="mascot-widget-header">
+      <div class="mascot-widget-title">
+        <span class="mascot-pulse-dot"></span>
+        <span>AISA Companions</span>
+      </div>
+      <button type="button" class="mascot-widget-close" id="btn-close-mascot-widget">✕</button>
+    </div>
+    <div class="mascot-widget-stage">
+      <div class="mascot-duo-avatars-stage">
+        <div class="mascot-chibi-card harmony" title="Harmony 🌸 (Yachiyo)">
+          <span class="mascot-chibi-emoji">🌸</span>
+          <span class="mascot-chibi-label">Harmony</span>
+        </div>
+        <div class="mascot-chibi-card echo" title="Echo 😈 (March 7th)">
+          <span class="mascot-chibi-emoji">😈</span>
+          <span class="mascot-chibi-label">Echo</span>
+        </div>
+      </div>
+      <div class="mascot-dialogue-balloon" id="mascot-dialogue-balloon">
+        <span>Sẵn sàng code cùng Sakura hôm nay! ✨🌸</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       4. QUICK OPEN MODAL (CTRL+P)
+       ======================================================================== -->
+  <div class="quick-open-modal-backdrop" id="modal-quick-open" style="display: none;">
+    <div class="quick-open-modal">
+      <div class="quick-open-input-row">
+        <span class="quick-open-icon">🔍</span>
+        <input type="text" class="quick-open-input" id="input-quick-open" placeholder="Gõ tên tệp để mở nhanh..." autocomplete="off">
+        <kbd>Esc để đóng</kbd>
+      </div>
+      <div class="quick-open-results-list" id="quick-open-results">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       5. RIGHT CLICK CONTEXT MENU FOR FILE TREE
+       ======================================================================== -->
+  <div class="file-context-menu" id="file-context-menu" style="display: none;">
+    <button type="button" class="ctx-menu-item" id="ctx-new-file">
+      <span>📄 Tạo tệp mới</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-new-folder">
+      <span>📁 Tạo thư mục mới</span>
+    </button>
+    <div class="ctx-menu-divider"></div>
+    <button type="button" class="ctx-menu-item" id="ctx-reveal-explorer">
+      <span>📂 Xem trong File Explorer</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-copy-path">
+      <span>📋 Sao chép đường dẫn</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-rename-file">
+      <span>✏️ Đổi tên</span>
+    </button>
+    <div class="ctx-menu-divider"></div>
+    <button type="button" class="ctx-menu-item ctx-danger" id="ctx-delete-file">
+      <span>🗑️ Xóa</span>
+    </button>
+  </div>
+
+  <!-- ========================================================================
+       6. STATUS BAR (BOTTOM)
        ======================================================================== -->
   <footer class="horizon-statusbar">
     <div class="statusbar-left">
-      <div class="statusbar-item" id="sb-git-branch">
+      <div class="statusbar-item statusbar-git" id="sb-git-branch" title="Nhánh Git hiện tại">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-        <span>main</span>
+        <span id="sb-git-branch-name">main</span>
       </div>
       <div class="statusbar-item" id="sb-workspace-status">MHEnt Workspace</div>
     </div>
@@ -215,6 +437,7 @@
     <div class="statusbar-right">
       <div class="statusbar-item" id="sb-cursor-pos">Ln 1, Col 1</div>
       <div class="statusbar-item">UTF-8</div>
+      <div class="statusbar-item">Spaces: 2</div>
       <div class="statusbar-item" id="sb-lang-mode">Plain Text</div>
       <div class="statusbar-item" style="color: #38bdf8;" id="sb-ai-status">● Gemini 2.0 Flash Online</div>
     </div>
