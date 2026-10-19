@@ -1443,7 +1443,10 @@ window.AisaHorizonApp = {
   },
 
   async createNewFilePrompt(basePath = null) {
-    const base = basePath || this.activeWorkspace;
+    let base = basePath || this.activeWorkspace;
+    if (this.selectedContextIsDir === false || (base && base.match(/\.[a-zA-Z0-9]+$/))) {
+      base = base.substring(0, base.lastIndexOf('\\')) || base;
+    }
     const name = await this.showInputDialog({
       title: 'Tạo tệp mới (New File)',
       desc: `Vị trí tạo tệp: ${base}`,
@@ -1458,20 +1461,41 @@ window.AisaHorizonApp = {
       } else {
         targetPath = base.replace(/[\\/]+$/, '') + '\\' + cleanName.replace(/\//g, '\\');
       }
+      if (!window.AisaHorizon?.createFile) {
+        this.showToast({
+          title: 'Lỗi môi trường',
+          message: 'Không tìm thấy API hệ thống Electron để tạo tệp!',
+          type: 'error'
+        });
+        return;
+      }
       const res = await window.AisaHorizon.createFile(targetPath);
       if (res && res.success) {
         await this.refreshFileTree();
         await this.openFile(targetPath);
         this.mascotSay(`🌸 Harmony: Đã tạo tệp mới [${cleanName}] cho Yurika rồi nè! ✨`);
         this.logOutput(`✔ Created new file: ${targetPath}`, 'agent');
+        this.showToast({
+          title: 'Tạo tệp thành công',
+          message: `Đã tạo tệp [${cleanName}] và mở vào trình soạn thảo!`,
+          type: 'success'
+        });
       } else {
+        this.showToast({
+          title: 'Lỗi tạo tệp',
+          message: res?.error || 'Không thể tạo tệp',
+          type: 'error'
+        });
         this.printTerminal(`❌ Lỗi tạo tệp: ${res?.error || 'Không thể tạo tệp'}`, '#ef4444');
       }
     }
   },
 
   async createNewFolderPrompt(basePath = null) {
-    const base = basePath || this.activeWorkspace;
+    let base = basePath || this.activeWorkspace;
+    if (this.selectedContextIsDir === false || (base && base.match(/\.[a-zA-Z0-9]+$/))) {
+      base = base.substring(0, base.lastIndexOf('\\')) || base;
+    }
     const name = await this.showInputDialog({
       title: 'Tạo thư mục mới (New Folder)',
       desc: `Vị trí tạo thư mục: ${base}`,
@@ -1486,12 +1510,30 @@ window.AisaHorizonApp = {
       } else {
         targetPath = base.replace(/[\\/]+$/, '') + '\\' + cleanName.replace(/\//g, '\\');
       }
+      if (!window.AisaHorizon?.createDir) {
+        this.showToast({
+          title: 'Lỗi môi trường',
+          message: 'Không tìm thấy API hệ thống Electron để tạo thư mục!',
+          type: 'error'
+        });
+        return;
+      }
       const res = await window.AisaHorizon.createDir(targetPath);
       if (res && res.success) {
         await this.refreshFileTree();
         this.mascotSay(`🌸 Harmony: Đã tạo thư mục [${cleanName}] thành công! ✨`);
         this.logOutput(`✔ Created directory: ${targetPath}`, 'agent');
+        this.showToast({
+          title: 'Tạo thư mục thành công',
+          message: `Đã tạo thư mục [${cleanName}] thành công!`,
+          type: 'success'
+        });
       } else {
+        this.showToast({
+          title: 'Lỗi tạo thư mục',
+          message: res?.error || 'Không thể tạo thư mục',
+          type: 'error'
+        });
         this.printTerminal(`❌ Lỗi tạo thư mục: ${res?.error || 'Không thể tạo thư mục'}`, '#ef4444');
       }
     }
@@ -3302,6 +3344,7 @@ window.AisaHorizonApp = {
     if (!menu) return;
 
     this.selectedContextPath = targetPath;
+    this.selectedContextIsDir = isDir;
     menu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
     menu.style.top = `${Math.min(y, window.innerHeight - 260)}px`;
     menu.style.display = 'flex';
