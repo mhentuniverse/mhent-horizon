@@ -401,16 +401,12 @@ window.AisaHorizonApp = {
           });
         } else if (this.selectedModel === 'custom-key') {
           if (modelIcon) modelIcon.textContent = '🔑';
-          const key = prompt('Nhập Gemini API Key cá nhân của cậu:', this.geminiKey || '');
-          if (key !== null && key.trim()) {
-            this.geminiKey = key.trim();
-            localStorage.setItem('mhent_ai_api_key', this.geminiKey);
-            this.showToast({
-              title: 'API Key Cá nhân',
-              message: 'Đã lưu Gemini API Key cá nhân thành công!',
-              type: 'success'
-            });
-          }
+          this.openSettingsModal('ai');
+          this.showToast({
+            title: 'Cấu hình API Key',
+            message: 'Đã mở bảng Cài Đặt AI để thiết lập API Key hoặc Base URL!',
+            type: 'info'
+          });
         } else if (this.selectedModel === 'gemini-2.0-pro') {
           if (modelIcon) modelIcon.textContent = '🧠';
           if (sbStatus) sbStatus.textContent = '● Gemini 2.0 Pro Exp Online';
@@ -819,6 +815,12 @@ window.AisaHorizonApp = {
         this.openSettingsModal();
       });
     }
+
+    // Explorer Header Action Buttons
+    document.getElementById('btn-change-workspace')?.addEventListener('click', () => this.openWorkspaceFolder());
+    document.getElementById('btn-new-file')?.addEventListener('click', () => this.createNewFilePrompt());
+    document.getElementById('btn-new-folder')?.addEventListener('click', () => this.createNewFolderPrompt());
+    document.getElementById('btn-refresh-files')?.addEventListener('click', () => this.refreshFileTree());
   },
 
   // ==========================================================================
@@ -1238,10 +1240,10 @@ window.AisaHorizonApp = {
       const isActive = t.path === this.activeTabPath;
       const icon = t.isMedia ? (t.mediaType === 'video' ? '🎬' : t.mediaType === 'audio' ? '🎵' : '🖼️') : (t.isBinary ? '📦' : this.getFileIcon(t.name));
       return `
-        <div class="editor-tab ${isActive ? 'active' : ''}" data-path="${t.path}">
-          <span>${icon}</span>
-          <span>${t.name}${t.isDirty ? ' ●' : ''}</span>
-          <span class="tab-close" data-close="${t.path}">×</span>
+        <div class="editor-tab ${isActive ? 'active' : ''}" data-path="${t.path}" title="${t.path}">
+          <span class="tab-icon">${icon}</span>
+          <span class="tab-title">${t.name}${t.isDirty ? ' ●' : ''}</span>
+          <span class="tab-close" data-close="${t.path}" title="Đóng tệp (Ctrl+W)">×</span>
         </div>
       `;
     }).join('');
@@ -1261,6 +1263,14 @@ window.AisaHorizonApp = {
         this.closeTab(p);
       });
     });
+
+    // Auto-scroll active tab into view
+    if (this.activeTabPath) {
+      const activeEl = container.querySelector(`.editor-tab[data-path="${CSS.escape(this.activeTabPath)}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+    }
 
     // Synchronize Explorer "OPEN EDITORS" List
     const openList = document.getElementById('open-editors-list');
@@ -1333,24 +1343,157 @@ window.AisaHorizonApp = {
     if (btnRefresh) btnRefresh.onclick = () => this.refreshFileTree();
   },
 
+  showInputDialog({ title, desc, icon, defaultValue = '', placeholder = '' }) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('horizon-input-modal');
+      const titleEl = document.getElementById('input-modal-title');
+      const descEl = document.getElementById('input-modal-desc');
+      const iconEl = document.getElementById('input-modal-icon');
+      const field = document.getElementById('input-modal-field');
+      const btnOk = document.getElementById('input-modal-btn-ok');
+      const btnCancel = document.getElementById('input-modal-btn-cancel');
+
+      if (!modal || !field) {
+        resolve(null);
+        return;
+      }
+
+      if (titleEl) titleEl.textContent = title || 'Nhập thông tin';
+      if (descEl) descEl.textContent = desc || '';
+      if (iconEl) iconEl.textContent = icon || '📄';
+      field.value = defaultValue || '';
+      field.placeholder = placeholder || '';
+
+      modal.style.display = 'flex';
+      setTimeout(() => {
+        field.focus();
+        field.select();
+      }, 50);
+
+      const cleanup = (val) => {
+        modal.style.display = 'none';
+        field.onkeydown = null;
+        if (btnOk) btnOk.onclick = null;
+        if (btnCancel) btnCancel.onclick = null;
+        modal.onclick = null;
+        resolve(val);
+      };
+
+      field.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          cleanup(field.value.trim());
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup(null);
+        }
+      };
+
+      if (btnOk) btnOk.onclick = () => cleanup(field.value.trim());
+      if (btnCancel) btnCancel.onclick = () => cleanup(null);
+      modal.onclick = (e) => {
+        if (e.target === modal) cleanup(null);
+      };
+    });
+  },
+
+  showConfirmDialog({ title, desc, okText = 'Xác nhận' }) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('horizon-confirm-modal');
+      const titleEl = document.getElementById('confirm-modal-title');
+      const descEl = document.getElementById('confirm-modal-desc');
+      const btnOk = document.getElementById('confirm-modal-btn-ok');
+      const btnCancel = document.getElementById('confirm-modal-btn-cancel');
+
+      if (!modal) {
+        resolve(false);
+        return;
+      }
+
+      if (titleEl) titleEl.textContent = title || 'Xác nhận thao tác';
+      if (descEl) descEl.textContent = desc || '';
+      if (btnOk) btnOk.textContent = okText;
+
+      modal.style.display = 'flex';
+
+      const cleanup = (val) => {
+        modal.style.display = 'none';
+        if (btnOk) btnOk.onclick = null;
+        if (btnCancel) btnCancel.onclick = null;
+        modal.onclick = null;
+        window.removeEventListener('keydown', handleKey);
+        resolve(val);
+      };
+
+      const handleKey = (e) => {
+        if (e.key === 'Escape') {
+          cleanup(false);
+        } else if (e.key === 'Enter') {
+          cleanup(true);
+        }
+      };
+      window.addEventListener('keydown', handleKey);
+
+      if (btnOk) btnOk.onclick = () => cleanup(true);
+      if (btnCancel) btnCancel.onclick = () => cleanup(false);
+      modal.onclick = (e) => {
+        if (e.target === modal) cleanup(false);
+      };
+    });
+  },
+
   async createNewFilePrompt(basePath = null) {
-    const name = prompt('Nhập tên tệp mới (ví dụ: test.js, styles.css):');
+    const base = basePath || this.activeWorkspace;
+    const name = await this.showInputDialog({
+      title: 'Tạo tệp mới (New File)',
+      desc: `Vị trí tạo tệp: ${base}`,
+      icon: '📄',
+      placeholder: 'Ví dụ: script.js, style.css hoặc src/components/App.jsx'
+    });
     if (name && name.trim()) {
-      const base = basePath || this.activeWorkspace;
-      const newPath = base + '\\' + name.trim();
-      await window.AisaHorizon.createFile(newPath);
-      await this.refreshFileTree();
-      await this.openFile(newPath);
+      const cleanName = name.trim();
+      let targetPath;
+      if (cleanName.includes(':') || cleanName.startsWith('\\') || cleanName.startsWith('/')) {
+        targetPath = cleanName;
+      } else {
+        targetPath = base.replace(/[\\/]+$/, '') + '\\' + cleanName.replace(/\//g, '\\');
+      }
+      const res = await window.AisaHorizon.createFile(targetPath);
+      if (res && res.success) {
+        await this.refreshFileTree();
+        await this.openFile(targetPath);
+        this.mascotSay(`🌸 Harmony: Đã tạo tệp mới [${cleanName}] cho Yurika rồi nè! ✨`);
+        this.logOutput(`✔ Created new file: ${targetPath}`, 'agent');
+      } else {
+        this.printTerminal(`❌ Lỗi tạo tệp: ${res?.error || 'Không thể tạo tệp'}`, '#ef4444');
+      }
     }
   },
 
   async createNewFolderPrompt(basePath = null) {
-    const name = prompt('Nhập tên thư mục mới:');
+    const base = basePath || this.activeWorkspace;
+    const name = await this.showInputDialog({
+      title: 'Tạo thư mục mới (New Folder)',
+      desc: `Vị trí tạo thư mục: ${base}`,
+      icon: '📁',
+      placeholder: 'Ví dụ: components, utils hoặc assets/images'
+    });
     if (name && name.trim()) {
-      const base = basePath || this.activeWorkspace;
-      const newPath = base + '\\' + name.trim();
-      await window.AisaHorizon.createDir(newPath);
-      await this.refreshFileTree();
+      const cleanName = name.trim();
+      let targetPath;
+      if (cleanName.includes(':') || cleanName.startsWith('\\') || cleanName.startsWith('/')) {
+        targetPath = cleanName;
+      } else {
+        targetPath = base.replace(/[\\/]+$/, '') + '\\' + cleanName.replace(/\//g, '\\');
+      }
+      const res = await window.AisaHorizon.createDir(targetPath);
+      if (res && res.success) {
+        await this.refreshFileTree();
+        this.mascotSay(`🌸 Harmony: Đã tạo thư mục [${cleanName}] thành công! ✨`);
+        this.logOutput(`✔ Created directory: ${targetPath}`, 'agent');
+      } else {
+        this.printTerminal(`❌ Lỗi tạo thư mục: ${res?.error || 'Không thể tạo thư mục'}`, '#ef4444');
+      }
     }
   },
 
@@ -2176,6 +2319,15 @@ window.AisaHorizonApp = {
         if (runningBadge) runningBadge.style.display = 'none';
         btnStop.style.display = 'none';
         this.printTerminal('\n[Process terminated by user (Ctrl+C)]', '#ef4444');
+      });
+    }
+
+    const selectShell = document.getElementById('select-terminal-shell');
+    if (selectShell) {
+      selectShell.addEventListener('change', (e) => {
+        const shellType = e.target.value;
+        this.printTerminal(`[AISA Horizon] Môi trường dòng lệnh hiện tại: ${shellType.toUpperCase()}`, '#38bdf8');
+        this.logOutput(`Terminal shell changed to ${shellType}`, 'system');
       });
     }
 
@@ -3093,15 +3245,33 @@ window.AisaHorizonApp = {
     document.getElementById('ctx-rename-file')?.addEventListener('click', async () => {
       if (!this.selectedContextPath) return;
       const oldName = this.selectedContextPath.split(/[\\/]/).pop();
-      const newName = prompt(`Đổi tên [${oldName}] thành:`, oldName);
+      const newName = await this.showInputDialog({
+        title: 'Đổi tên tệp / thư mục (Rename)',
+        desc: `Đổi tên hiện tại [${oldName}] sang tên mới:`,
+        icon: '✏️',
+        defaultValue: oldName,
+        placeholder: 'Nhập tên mới...'
+      });
       if (newName && newName.trim() && newName.trim() !== oldName) {
+        const cleanName = newName.trim();
         const parentDir = this.selectedContextPath.substring(0, this.selectedContextPath.lastIndexOf('\\'));
-        const newPath = parentDir + '\\' + newName.trim();
+        const newPath = parentDir + '\\' + cleanName;
         const res = await window.AisaHorizon?.renamePath(this.selectedContextPath, newPath);
         if (res && res.success) {
+          // If active tab was renamed, update tab
+          const tab = this.openTabs.find(t => t.path === this.selectedContextPath);
+          if (tab) {
+            tab.path = newPath;
+            tab.name = cleanName;
+          }
+          if (this.activeTabPath === this.selectedContextPath) {
+            this.activeTabPath = newPath;
+          }
+          this.renderTabs();
           await this.refreshFileTree();
+          this.mascotSay(`✏️ Đã đổi tên thành công sang [${cleanName}]! ✨`);
         } else {
-          alert('Lỗi đổi tên: ' + res?.error);
+          this.printTerminal(`❌ Lỗi đổi tên: ${res?.error || 'Không thể đổi tên'}`, '#ef4444');
         }
       }
     });
@@ -3109,14 +3279,19 @@ window.AisaHorizonApp = {
     document.getElementById('ctx-delete-file')?.addEventListener('click', async () => {
       if (!this.selectedContextPath) return;
       const name = this.selectedContextPath.split(/[\\/]/).pop();
-      if (confirm(`Yurika có chắc chắn muốn xóa [${name}] không?`)) {
+      const confirmed = await this.showConfirmDialog({
+        title: 'Xóa vĩnh viễn tệp / thư mục',
+        desc: `Yurika có chắc chắn muốn xóa [${name}] không? Hành động này sẽ xóa hoàn toàn khỏi ổ đĩa.`,
+        okText: 'Xóa vĩnh viễn'
+      });
+      if (confirmed) {
         const res = await window.AisaHorizon?.deletePath(this.selectedContextPath);
         if (res && res.success) {
           this.closeTab(this.selectedContextPath);
           await this.refreshFileTree();
-          this.mascotSay(`🗑️ Đã xóa [${name}] an toàn!`);
+          this.mascotSay(`🗑️ Đã xóa [${name}] thành công! ✨`);
         } else {
-          alert('Lỗi khi xóa: ' + res?.error);
+          this.printTerminal(`❌ Lỗi khi xóa: ${res?.error || 'Không thể xóa'}`, '#ef4444');
         }
       }
     });

@@ -1075,6 +1075,47 @@
         </div>
       </div>
     </div>
+  <!-- ========================================================================
+       8. QUICK INPUT DIALOG (New File, New Folder, Rename)
+       ======================================================================== -->
+  <div class="horizon-modal-backdrop" id="horizon-input-modal" style="display: none;">
+    <div class="horizon-input-box">
+      <div class="input-box-header">
+        <span class="input-box-icon" id="input-modal-icon">📄</span>
+        <span class="input-box-title" id="input-modal-title">Tạo tệp mới</span>
+      </div>
+      <div class="input-box-desc" id="input-modal-desc">Nhập tên hoặc đường dẫn tương đối (ví dụ: src/app.js)</div>
+      <div class="input-box-row">
+        <input type="text" class="input-box-field" id="input-modal-field" placeholder="Tên tệp..." autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="input-box-footer">
+        <span class="input-box-hint"><kbd>Enter</kbd> Xác nhận • <kbd>Esc</kbd> Hủy</span>
+        <div class="input-box-actions">
+          <button type="button" class="btn-input-cancel" id="input-modal-btn-cancel">Hủy</button>
+          <button type="button" class="btn-input-ok" id="input-modal-btn-ok">Xác nhận</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       9. QUICK CONFIRM DIALOG (Delete, Permanent Actions)
+       ======================================================================== -->
+  <div class="horizon-modal-backdrop" id="horizon-confirm-modal" style="display: none;">
+    <div class="horizon-confirm-box">
+      <div class="confirm-box-header">
+        <span class="confirm-box-icon">⚠️</span>
+        <span class="confirm-box-title" id="confirm-modal-title">Xác nhận thao tác</span>
+      </div>
+      <div class="confirm-box-desc" id="confirm-modal-desc">Yurika có chắc chắn muốn thực hiện hành động này không?</div>
+      <div class="confirm-box-footer">
+        <span class="input-box-hint"><kbd>Enter</kbd> Đồng ý • <kbd>Esc</kbd> Hủy</span>
+        <div class="confirm-box-actions">
+          <button type="button" class="btn-input-cancel" id="confirm-modal-btn-cancel">Hủy</button>
+          <button type="button" class="btn-confirm-danger" id="confirm-modal-btn-ok">Xác nhận</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Horizon Toast Notification Container (Bottom-Right) -->
