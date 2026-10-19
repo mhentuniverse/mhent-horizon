@@ -838,9 +838,15 @@
     <button type="button" class="ctx-menu-item" id="ctx-new-folder">
       <span>📁 Tạo thư mục mới</span>
     </button>
-    <div class="ctx-menu-divider"></div>
+    <div class="ctx-menu-divider" id="ctx-divider-1"></div>
     <button type="button" class="ctx-menu-item" id="ctx-reveal-explorer">
       <span>📂 Xem trong File Explorer</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-open-terminal">
+      <span>🖥️ Mở Terminal tại đây</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-refresh-tree">
+      <span>🔄 Làm mới cây tệp</span>
     </button>
     <button type="button" class="ctx-menu-item" id="ctx-open-external">
       <span>🚀 Mở bằng ứng dụng hệ thống</span>
@@ -851,9 +857,79 @@
     <button type="button" class="ctx-menu-item" id="ctx-rename-file">
       <span>✏️ Đổi tên</span>
     </button>
-    <div class="ctx-menu-divider"></div>
+    <div class="ctx-menu-divider" id="ctx-divider-2"></div>
     <button type="button" class="ctx-menu-item ctx-danger" id="ctx-delete-file">
       <span>🗑️ Xóa</span>
+    </button>
+  </div>
+
+  <!-- Tab Context Menu (Right Click on Editor Tab) -->
+  <div class="file-context-menu" id="tab-context-menu" style="display: none;">
+    <button type="button" class="ctx-menu-item" id="ctx-tab-close">
+      <span>✕ Đóng tệp</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-tab-close-others">
+      <span>✕ Đóng các tệp khác</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-tab-close-right">
+      <span>✕ Đóng các tệp bên phải</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-tab-close-all">
+      <span>✕ Đóng tất cả tệp</span>
+    </button>
+    <div class="ctx-menu-divider"></div>
+    <button type="button" class="ctx-menu-item" id="ctx-tab-save">
+      <span>💾 Lưu tệp này</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-tab-copy-path">
+      <span>📋 Sao chép đường dẫn</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-tab-reveal">
+      <span>📂 Xem trong File Explorer</span>
+    </button>
+  </div>
+
+  <!-- Terminal Context Menu (Right Click on Terminal Panel / Output) -->
+  <div class="file-context-menu" id="terminal-context-menu" style="display: none;">
+    <button type="button" class="ctx-menu-item" id="ctx-terminal-copy">
+      <span>📋 Sao chép (Copy)</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-terminal-paste">
+      <span>📋 Dán lệnh (Paste)</span>
+    </button>
+    <div class="ctx-menu-divider"></div>
+    <button type="button" class="ctx-menu-item" id="ctx-terminal-clear">
+      <span>🧹 Xóa màn hình Terminal</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-terminal-restart">
+      <span>⚡ Khởi động lại Shell</span>
+    </button>
+    <button type="button" class="ctx-menu-item ctx-danger" id="ctx-terminal-kill">
+      <span>⏹ Dừng tiến trình (Ctrl+C)</span>
+    </button>
+  </div>
+
+  <!-- Studio Global Context Menu (Right Click on empty workspace / general UI area) -->
+  <div class="file-context-menu" id="studio-global-context-menu" style="display: none;">
+    <button type="button" class="ctx-menu-item" id="ctx-global-new-file">
+      <span>📄 Tạo tệp mới</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-global-new-folder">
+      <span>📁 Tạo thư mục mới</span>
+    </button>
+    <div class="ctx-menu-divider"></div>
+    <button type="button" class="ctx-menu-item" id="ctx-global-quick-open">
+      <span>🔍 Tìm nhanh tệp (Ctrl+P)</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-global-inline-ai">
+      <span>✨ Trợ lý Inline AI (Ctrl+K)</span>
+    </button>
+    <button type="button" class="ctx-menu-item" id="ctx-global-toggle-terminal">
+      <span>🖥️ Bật/Tắt Terminal (Ctrl+`)</span>
+    </button>
+    <div class="ctx-menu-divider"></div>
+    <button type="button" class="ctx-menu-item" id="ctx-global-open-settings">
+      <span>⚙️ Cài đặt & Tùy biến (Ctrl+,)</span>
     </button>
   </div>
 

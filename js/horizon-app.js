@@ -84,8 +84,11 @@ window.AisaHorizonApp = {
     // 12. Setup Quick Open Modal (Ctrl+P)
     this.setupQuickOpen();
 
-    // 13. Setup File Context Menu
+    // 13. Setup File, Tab, Terminal & Global Studio Context Menus
     this.setupContextMenu();
+    this.setupTabContextMenu();
+    this.setupTerminalContextMenu();
+    this.setupGlobalContextMenu();
 
     // 14. Setup Floating Companion Mascot
     this.setupMascotWidget();
@@ -1042,6 +1045,7 @@ window.AisaHorizonApp = {
 
     this.updateBreadcrumbs();
     this.renderTabs();
+    this.selectTreeItem(null, filePath, false);
   },
 
   renderMediaView(container, tab) {
@@ -1254,6 +1258,12 @@ window.AisaHorizonApp = {
         const p = el.getAttribute('data-path');
         this.switchTab(p);
       });
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const p = el.getAttribute('data-path');
+        this.openTabContextMenu(e.clientX, e.clientY, p);
+      });
     });
 
     container.querySelectorAll('.tab-close').forEach(el => {
@@ -1263,6 +1273,16 @@ window.AisaHorizonApp = {
         this.closeTab(p);
       });
     });
+
+    if (!container._hasContextMenu) {
+      container._hasContextMenu = true;
+      container.addEventListener('contextmenu', (e) => {
+        if (!e.target.closest('.editor-tab') && this.activeTabPath) {
+          e.preventDefault();
+          this.openTabContextMenu(e.clientX, e.clientY, this.activeTabPath);
+        }
+      });
+    }
 
     // Auto-scroll active tab into view
     if (this.activeTabPath) {
@@ -1299,6 +1319,12 @@ window.AisaHorizonApp = {
             if (e.target.classList.contains('open-editor-close')) return;
             this.switchTab(el.getAttribute('data-path'));
           });
+          el.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const p = el.getAttribute('data-path');
+            this.openTabContextMenu(e.clientX, e.clientY, p);
+          });
         });
 
         openList.querySelectorAll('.open-editor-close').forEach(el => {
@@ -1309,6 +1335,28 @@ window.AisaHorizonApp = {
         });
       }
     }
+  },
+
+  selectTreeItem(row, itemPath, isDir) {
+    document.querySelectorAll('.tree-item.selected, .tree-item.active').forEach(el => {
+      el.classList.remove('selected', 'active');
+    });
+    let targetRow = row;
+    if (!targetRow && itemPath) {
+      const items = document.querySelectorAll('.tree-item');
+      for (const it of items) {
+        if (it.getAttribute('data-path') === itemPath) {
+          targetRow = it;
+          break;
+        }
+      }
+    }
+    if (targetRow) {
+      targetRow.classList.add('selected', 'active');
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    this.selectedTreePath = itemPath;
+    this.selectedTreeIsDir = isDir;
   },
 
   // ==========================================================================
@@ -1341,6 +1389,35 @@ window.AisaHorizonApp = {
 
     const btnRefresh = document.getElementById('btn-refresh-files');
     if (btnRefresh) btnRefresh.onclick = () => this.refreshFileTree();
+
+    // Explorer Container Empty Area Context Menu & Click
+    if (!container._hasContextMenu) {
+      container._hasContextMenu = true;
+      container.addEventListener('click', (e) => {
+        if (!e.target.closest('.tree-item')) {
+          this.selectTreeItem(null, this.activeWorkspace, true);
+        }
+      });
+      container.addEventListener('contextmenu', (e) => {
+        if (!e.target.closest('.tree-item')) {
+          e.preventDefault();
+          this.selectTreeItem(null, this.activeWorkspace, true);
+          this.openContextMenu(e.clientX, e.clientY, this.activeWorkspace, true, true);
+        }
+      });
+    }
+
+    const panelExplorer = document.getElementById('panel-explorer');
+    if (panelExplorer && !panelExplorer._hasContextMenu) {
+      panelExplorer._hasContextMenu = true;
+      panelExplorer.addEventListener('contextmenu', (e) => {
+        if (!e.target.closest('.tree-item') && !e.target.closest('.sidebar-header')) {
+          e.preventDefault();
+          this.selectTreeItem(null, this.activeWorkspace, true);
+          this.openContextMenu(e.clientX, e.clientY, this.activeWorkspace, true, true);
+        }
+      });
+    }
   },
 
   showInputDialog({ title, desc, icon, defaultValue = '', placeholder = '' }) {
@@ -1443,13 +1520,31 @@ window.AisaHorizonApp = {
   },
 
   async createNewFilePrompt(basePath = null) {
-    let base = basePath || this.activeWorkspace;
-    if (this.selectedContextIsDir === false || (base && base.match(/\.[a-zA-Z0-9]+$/))) {
+    let base = basePath;
+    if (!base) {
+      if (this.selectedTreePath) {
+        base = this.selectedTreeIsDir 
+          ? this.selectedTreePath 
+          : this.selectedTreePath.substring(0, this.selectedTreePath.lastIndexOf('\\'));
+      } else if (this.activeTabPath) {
+        base = this.activeTabPath.substring(0, this.activeTabPath.lastIndexOf('\\'));
+      } else {
+        base = this.activeWorkspace;
+      }
+    }
+    if (base && base.match(/\.[a-zA-Z0-9]+$/)) {
       base = base.substring(0, base.lastIndexOf('\\')) || base;
     }
+    base = base || this.activeWorkspace;
+
+    // Display formatted relative path
+    const rel = base.startsWith(this.activeWorkspace) 
+      ? (base.replace(this.activeWorkspace, '').replace(/^[\\/]/, '') || '(Thư mục gốc Workspace)')
+      : base.split(/[\\/]/).slice(-2).join('/');
+
     const name = await this.showInputDialog({
       title: 'Tạo tệp mới (New File)',
-      desc: `Vị trí tạo tệp: ${base}`,
+      desc: `📁 Vị trí lưu: ${rel}\n(${base})`,
       icon: '📄',
       placeholder: 'Ví dụ: script.js, style.css hoặc src/components/App.jsx'
     });
@@ -1471,6 +1566,9 @@ window.AisaHorizonApp = {
       }
       const res = await window.AisaHorizon.createFile(targetPath);
       if (res && res.success) {
+        if (base && base !== this.activeWorkspace) {
+          this.expandedFolders.add(base);
+        }
         await this.refreshFileTree();
         await this.openFile(targetPath);
         this.mascotSay(`🌸 Harmony: Đã tạo tệp mới [${cleanName}] cho Yurika rồi nè! ✨`);
@@ -1492,13 +1590,30 @@ window.AisaHorizonApp = {
   },
 
   async createNewFolderPrompt(basePath = null) {
-    let base = basePath || this.activeWorkspace;
-    if (this.selectedContextIsDir === false || (base && base.match(/\.[a-zA-Z0-9]+$/))) {
+    let base = basePath;
+    if (!base) {
+      if (this.selectedTreePath) {
+        base = this.selectedTreeIsDir 
+          ? this.selectedTreePath 
+          : this.selectedTreePath.substring(0, this.selectedTreePath.lastIndexOf('\\'));
+      } else if (this.activeTabPath) {
+        base = this.activeTabPath.substring(0, this.activeTabPath.lastIndexOf('\\'));
+      } else {
+        base = this.activeWorkspace;
+      }
+    }
+    if (base && base.match(/\.[a-zA-Z0-9]+$/)) {
       base = base.substring(0, base.lastIndexOf('\\')) || base;
     }
+    base = base || this.activeWorkspace;
+
+    const rel = base.startsWith(this.activeWorkspace) 
+      ? (base.replace(this.activeWorkspace, '').replace(/^[\\/]/, '') || '(Thư mục gốc Workspace)')
+      : base.split(/[\\/]/).slice(-2).join('/');
+
     const name = await this.showInputDialog({
       title: 'Tạo thư mục mới (New Folder)',
-      desc: `Vị trí tạo thư mục: ${base}`,
+      desc: `📁 Vị trí lưu: ${rel}\n(${base})`,
       icon: '📁',
       placeholder: 'Ví dụ: components, utils hoặc assets/images'
     });
@@ -1520,7 +1635,11 @@ window.AisaHorizonApp = {
       }
       const res = await window.AisaHorizon.createDir(targetPath);
       if (res && res.success) {
+        if (base && base !== this.activeWorkspace) {
+          this.expandedFolders.add(base);
+        }
         await this.refreshFileTree();
+        this.selectTreeItem(null, targetPath, true);
         this.mascotSay(`🌸 Harmony: Đã tạo thư mục [${cleanName}] thành công! ✨`);
         this.logOutput(`✔ Created directory: ${targetPath}`, 'agent');
         this.showToast({
@@ -1563,6 +1682,7 @@ window.AisaHorizonApp = {
 
       row.addEventListener('click', async (e) => {
         e.stopPropagation();
+        this.selectTreeItem(row, item.path, true);
         const arrow = row.querySelector('.tree-arrow');
         if (this.expandedFolders.has(item.path)) {
           this.expandedFolders.delete(item.path);
@@ -1592,7 +1712,8 @@ window.AisaHorizonApp = {
       row.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.openContextMenu(e.clientX, e.clientY, item.path, true);
+        this.selectTreeItem(row, item.path, true);
+        this.openContextMenu(e.clientX, e.clientY, item.path, true, false);
       });
 
       wrapper.appendChild(row);
@@ -1605,12 +1726,16 @@ window.AisaHorizonApp = {
         <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</span>
       `;
 
-      row.addEventListener('click', () => this.openFile(item.path));
+      row.addEventListener('click', () => {
+        this.selectTreeItem(row, item.path, false);
+        this.openFile(item.path);
+      });
 
       row.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.openContextMenu(e.clientX, e.clientY, item.path, false);
+        this.selectTreeItem(row, item.path, false);
+        this.openContextMenu(e.clientX, e.clientY, item.path, false, false);
       });
 
       wrapper.appendChild(row);
@@ -3251,12 +3376,6 @@ window.AisaHorizonApp = {
   // 13. FILE CONTEXT MENU
   // ==========================================================================
   setupContextMenu() {
-    const menu = document.getElementById('file-context-menu');
-
-    window.addEventListener('click', () => {
-      if (menu) menu.style.display = 'none';
-    });
-
     document.getElementById('ctx-new-file')?.addEventListener('click', () => {
       this.createNewFilePrompt(this.selectedContextPath);
     });
@@ -3269,6 +3388,24 @@ window.AisaHorizonApp = {
       if (this.selectedContextPath && window.AisaHorizon) {
         window.AisaHorizon.revealInExplorer(this.selectedContextPath);
       }
+    });
+
+    document.getElementById('ctx-open-terminal')?.addEventListener('click', () => {
+      if (!this.selectedContextPath) return;
+      const targetDir = this.selectedContextIsDir 
+        ? this.selectedContextPath 
+        : this.selectedContextPath.substring(0, this.selectedContextPath.lastIndexOf('\\'));
+      this.switchBottomTab('terminal');
+      this.toggleBottomPanel(true);
+      if (window.AisaHorizon?.runCommandStream) {
+        window.AisaHorizon.runCommandStream(`cd "${targetDir}"`, targetDir);
+      }
+      this.mascotSay(`🌸 Harmony: Đã mở Terminal tại [${targetDir.split(/[\\/]/).pop() || 'Workspace'}] rồi nhé! ✨`);
+    });
+
+    document.getElementById('ctx-refresh-tree')?.addEventListener('click', async () => {
+      await this.refreshFileTree();
+      this.mascotSay('🔄 Đã làm mới cây thư mục dự án!');
     });
 
     document.getElementById('ctx-open-external')?.addEventListener('click', () => {
@@ -3300,7 +3437,6 @@ window.AisaHorizonApp = {
         const newPath = parentDir + '\\' + cleanName;
         const res = await window.AisaHorizon?.renamePath(this.selectedContextPath, newPath);
         if (res && res.success) {
-          // If active tab was renamed, update tab
           const tab = this.openTabs.find(t => t.path === this.selectedContextPath);
           if (tab) {
             tab.path = newPath;
@@ -3339,15 +3475,271 @@ window.AisaHorizonApp = {
     });
   },
 
-  openContextMenu(x, y, targetPath, isDir) {
+  openContextMenu(x, y, targetPath, isDir, isRoot = false) {
+    this.closeAllContextMenus();
     const menu = document.getElementById('file-context-menu');
     if (!menu) return;
 
     this.selectedContextPath = targetPath;
     this.selectedContextIsDir = isDir;
+
+    const btnRename = document.getElementById('ctx-rename-file');
+    const btnDelete = document.getElementById('ctx-delete-file');
+    const div2 = document.getElementById('ctx-divider-2');
+    if (btnRename) btnRename.style.display = isRoot ? 'none' : 'flex';
+    if (btnDelete) btnDelete.style.display = isRoot ? 'none' : 'flex';
+    if (div2) div2.style.display = isRoot ? 'none' : 'block';
+
+    menu.style.left = `${Math.min(x, window.innerWidth - 230)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 320)}px`;
+    menu.style.display = 'flex';
+  },
+
+  // ==========================================================================
+  // TAB CONTEXT MENU (RIGHT CLICK ON TABS)
+  // ==========================================================================
+  setupTabContextMenu() {
+    document.getElementById('ctx-tab-close')?.addEventListener('click', () => {
+      if (this.selectedTabPath) this.closeTab(this.selectedTabPath);
+    });
+
+    document.getElementById('ctx-tab-close-others')?.addEventListener('click', () => {
+      if (this.selectedTabPath) this.closeOtherTabs(this.selectedTabPath);
+    });
+
+    document.getElementById('ctx-tab-close-right')?.addEventListener('click', () => {
+      if (this.selectedTabPath) this.closeRightTabs(this.selectedTabPath);
+    });
+
+    document.getElementById('ctx-tab-close-all')?.addEventListener('click', () => {
+      this.closeAllTabs();
+    });
+
+    document.getElementById('ctx-tab-save')?.addEventListener('click', async () => {
+      if (!this.selectedTabPath) return;
+      const tab = this.openTabs.find(t => t.path === this.selectedTabPath);
+      if (tab && tab.model) {
+        const res = await window.AisaHorizon?.writeFile(tab.path, tab.model.getValue());
+        if (res && res.success) {
+          tab.isDirty = false;
+          this.renderTabs();
+          this.mascotSay(`💾 Đã lưu tệp [${tab.name}] thành công! ✨`);
+        }
+      }
+    });
+
+    document.getElementById('ctx-tab-copy-path')?.addEventListener('click', () => {
+      if (this.selectedTabPath) {
+        navigator.clipboard.writeText(this.selectedTabPath);
+        this.mascotSay('📋 Đã sao chép đường dẫn tệp vào Clipboard!');
+      }
+    });
+
+    document.getElementById('ctx-tab-reveal')?.addEventListener('click', () => {
+      if (this.selectedTabPath && window.AisaHorizon) {
+        window.AisaHorizon.revealInExplorer(this.selectedTabPath);
+      }
+    });
+  },
+
+  openTabContextMenu(x, y, targetPath) {
+    this.closeAllContextMenus();
+    const menu = document.getElementById('tab-context-menu');
+    if (!menu) return;
+
+    this.selectedTabPath = targetPath;
     menu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
     menu.style.top = `${Math.min(y, window.innerHeight - 260)}px`;
     menu.style.display = 'flex';
+  },
+
+  closeOtherTabs(keepPath) {
+    const toClose = this.openTabs.filter(t => t.path !== keepPath).map(t => t.path);
+    toClose.forEach(p => this.closeTab(p));
+  },
+
+  closeRightTabs(currentPath) {
+    const idx = this.openTabs.findIndex(t => t.path === currentPath);
+    if (idx === -1) return;
+    const toClose = this.openTabs.slice(idx + 1).map(t => t.path);
+    toClose.forEach(p => this.closeTab(p));
+  },
+
+  closeAllTabs() {
+    const toClose = [...this.openTabs].map(t => t.path);
+    toClose.forEach(p => this.closeTab(p));
+  },
+
+  // ==========================================================================
+  // TERMINAL CONTEXT MENU (RIGHT CLICK ON TERMINAL)
+  // ==========================================================================
+  setupTerminalContextMenu() {
+    const terminalEl = document.getElementById('terminal-output-container');
+    const bottomPanel = document.getElementById('panel-bottom');
+
+    const handleCtx = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.openTerminalContextMenu(e.clientX, e.clientY);
+    };
+
+    if (terminalEl) terminalEl.addEventListener('contextmenu', handleCtx);
+    if (bottomPanel) {
+      bottomPanel.addEventListener('contextmenu', (e) => {
+        if (!e.target.closest('input') && !e.target.closest('select')) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.openTerminalContextMenu(e.clientX, e.clientY);
+        }
+      });
+    }
+
+    document.getElementById('ctx-terminal-copy')?.addEventListener('click', () => {
+      const sel = window.getSelection()?.toString();
+      if (sel) {
+        navigator.clipboard.writeText(sel);
+        this.mascotSay('📋 Đã sao chép nội dung Terminal!');
+      }
+    });
+
+    document.getElementById('ctx-terminal-paste')?.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        const input = document.getElementById('terminal-command-input');
+        if (input && text) {
+          input.value += text;
+          input.focus();
+        }
+      } catch (err) {
+        console.warn('Clipboard read error:', err);
+      }
+    });
+
+    document.getElementById('ctx-terminal-clear')?.addEventListener('click', () => {
+      this.clearTerminal();
+    });
+
+    document.getElementById('ctx-terminal-restart')?.addEventListener('click', () => {
+      this.clearTerminal();
+      this.printTerminal('[AISA Horizon] Shell đã được làm mới.', '#38bdf8');
+      this.mascotSay('⚡ Shell Terminal đã sẵn sàng!');
+    });
+
+    document.getElementById('ctx-terminal-kill')?.addEventListener('click', async () => {
+      await window.AisaHorizon?.stopCommand();
+      this.printTerminal('\n[Process terminated by user (Ctrl+C)]', '#ef4444');
+    });
+  },
+
+  openTerminalContextMenu(x, y) {
+    this.closeAllContextMenus();
+    const menu = document.getElementById('terminal-context-menu');
+    if (!menu) return;
+
+    menu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 240)}px`;
+    menu.style.display = 'flex';
+  },
+
+  // ==========================================================================
+  // GLOBAL STUDIO CONTEXT MENU (RIGHT CLICK ON BACKGROUND / VACANT CANVAS)
+  // ==========================================================================
+  setupGlobalContextMenu() {
+    const emptyState = document.getElementById('editor-empty-state');
+    if (emptyState) {
+      emptyState.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openGlobalContextMenu(e.clientX, e.clientY);
+      });
+    }
+
+    const breadcrumb = document.querySelector('.editor-breadcrumbs');
+    if (breadcrumb) {
+      breadcrumb.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.activeTabPath) {
+          this.openTabContextMenu(e.clientX, e.clientY, this.activeTabPath);
+        } else {
+          this.openGlobalContextMenu(e.clientX, e.clientY);
+        }
+      });
+    }
+
+    const statusBar = document.querySelector('.horizon-statusbar');
+    if (statusBar) {
+      statusBar.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openGlobalContextMenu(e.clientX, e.clientY);
+      });
+    }
+
+    const actBar = document.querySelector('.horizon-activitybar');
+    if (actBar) {
+      actBar.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openGlobalContextMenu(e.clientX, e.clientY);
+      });
+    }
+
+    // Global listener on window to catch right clicks on any background / general areas
+    window.addEventListener('contextmenu', (e) => {
+      if (e.defaultPrevented) return;
+      if (e.target.closest('#monaco-editor-instance') || e.target.closest('#monaco-diff-editor-instance')) return;
+      if (e.target.closest('input') || e.target.closest('textarea') || e.target.closest('select')) return;
+      if (e.target.closest('.file-context-menu') || e.target.closest('.titlebar-dropdown') || e.target.closest('.quick-open-modal') || e.target.closest('.settings-modal')) return;
+
+      e.preventDefault();
+      this.openGlobalContextMenu(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('click', () => {
+      this.closeAllContextMenus();
+    });
+
+    document.getElementById('ctx-global-new-file')?.addEventListener('click', () => {
+      this.createNewFilePrompt();
+    });
+
+    document.getElementById('ctx-global-new-folder')?.addEventListener('click', () => {
+      this.createNewFolderPrompt();
+    });
+
+    document.getElementById('ctx-global-quick-open')?.addEventListener('click', () => {
+      this.openQuickOpen();
+    });
+
+    document.getElementById('ctx-global-inline-ai')?.addEventListener('click', () => {
+      this.openInlineAI();
+    });
+
+    document.getElementById('ctx-global-toggle-terminal')?.addEventListener('click', () => {
+      this.toggleBottomPanel();
+    });
+
+    document.getElementById('ctx-global-open-settings')?.addEventListener('click', () => {
+      this.openSettingsModal();
+    });
+  },
+
+  openGlobalContextMenu(x, y) {
+    this.closeAllContextMenus();
+    const menu = document.getElementById('studio-global-context-menu');
+    if (!menu) return;
+
+    menu.style.left = `${Math.min(x, window.innerWidth - 240)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - 260)}px`;
+    menu.style.display = 'flex';
+  },
+
+  closeAllContextMenus() {
+    ['file-context-menu', 'tab-context-menu', 'terminal-context-menu', 'studio-global-context-menu'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
   },
 
   // ==========================================================================
