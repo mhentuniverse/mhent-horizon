@@ -23,6 +23,8 @@ window.AisaHorizonApp = {
   selectedContextPath: null,
   gitRepos: [],
   selectedGitRepo: null,
+  safetyMode: 'ask', // 'ask' | 'auto'
+  selectedModel: 'gemini-2.0-flash',
 
   async init() {
     console.log('%c[AISA Horizon IDE] Initializing Celestial Studio v2.0...', 'color: #38bdf8; font-weight: bold;');
@@ -30,6 +32,11 @@ window.AisaHorizonApp = {
     // 1. Setup Window & Titlebar Controls + Dropdown Menus
     this.setupTitlebarControls();
     this.setupDropdownMenus();
+    this.setupLayoutToggles();
+    this.setupResizers();
+    this.setupSafetyApprovalGate();
+    this.setupModelHub();
+    this.setupWelcomeScreen();
 
     // 2. Load API Key and Active Workspace
     if (window.AisaHorizon) {
@@ -45,6 +52,7 @@ window.AisaHorizonApp = {
     }
 
     this.updateWorkspaceUI(this.activeWorkspace);
+    this.updateWindowTitle();
 
     // 3. Initialize Monaco Editor & Diff Editor
     this.initMonaco();
@@ -82,7 +90,7 @@ window.AisaHorizonApp = {
     // 14. Setup Global Keyboard Shortcuts
     this.setupKeybindings();
 
-    this.mascotSay('🌸 Harmony: Chào mừng Sakura trở lại AISA Horizon Studio! Tụi em đã nâng cấp đầy đủ toàn bộ tính năng rồi nè! ✨');
+    this.mascotSay('🌸 Harmony: Chào mừng Yurika trở lại AISA Horizon Studio! Tụi em đã nâng cấp đầy đủ toàn bộ tính năng rồi nè! ✨');
   },
 
   // ==========================================================================
@@ -146,6 +154,356 @@ window.AisaHorizonApp = {
         btnToggleCopilot.classList.toggle('active', isHidden);
       });
     }
+  },
+
+  updateWindowTitle() {
+    const wsName = (this.activeWorkspace || '').split(/[\\/]/).pop() || 'MHEnt. Universe';
+    const activeTab = this.openTabs.find(t => t.path === this.activeTabPath);
+    const fileName = activeTab ? activeTab.name : 'Chưa mở tệp';
+
+    const elFile = document.getElementById('win-title-file');
+    const elWs = document.getElementById('win-title-workspace');
+    if (elFile) elFile.textContent = fileName;
+    if (elWs) elWs.textContent = wsName;
+
+    // Cập nhật tiêu đề cửa sổ hệ thống
+    document.title = `${fileName} — ${wsName} — MHEnt. AISA Horizon`;
+  },
+
+  setupLayoutToggles() {
+    const btnLeft = document.getElementById('btn-toggle-primary-sidebar');
+    const btnBottom = document.getElementById('btn-toggle-bottom-panel');
+    const btnRight = document.getElementById('btn-toggle-secondary-sidebar');
+    const btnSettings = document.getElementById('btn-top-settings');
+
+    const sidebar = document.getElementById('horizon-sidebar');
+    const terminal = document.getElementById('terminal-panel');
+    const copilot = document.getElementById('horizon-copilot-panel');
+
+    const togglePanel = (el, btn) => {
+      if (!el) return;
+      const isHidden = el.style.display === 'none';
+      el.style.display = isHidden ? 'flex' : 'none';
+      btn?.classList.toggle('active', isHidden);
+      setTimeout(() => {
+        this.editor?.layout();
+        this.diffEditor?.layout();
+      }, 50);
+    };
+
+    if (btnLeft && sidebar) {
+      btnLeft.addEventListener('click', () => togglePanel(sidebar, btnLeft));
+    }
+
+    if (btnBottom && terminal) {
+      btnBottom.addEventListener('click', () => {
+        togglePanel(terminal, btnBottom);
+        if (terminal.style.display !== 'none') document.getElementById('terminal-input')?.focus();
+      });
+    }
+
+    if (btnRight && copilot) {
+      btnRight.addEventListener('click', () => togglePanel(copilot, btnRight));
+    }
+
+    if (btnSettings) {
+      btnSettings.addEventListener('click', () => {
+        document.getElementById('act-btn-settings')?.click();
+      });
+    }
+
+    const dynTitle = document.getElementById('dynamic-window-title');
+    if (dynTitle) {
+      dynTitle.addEventListener('click', () => document.getElementById('btn-change-workspace')?.click());
+    }
+  },
+
+  setupResizers() {
+    const resizerLeft = document.getElementById('resizer-left');
+    const resizerRight = document.getElementById('resizer-right');
+    const resizerBottom = document.getElementById('resizer-bottom');
+
+    const sidebar = document.getElementById('horizon-sidebar');
+    const copilot = document.getElementById('horizon-copilot-panel');
+    const terminal = document.getElementById('terminal-panel');
+
+    // 1. Resizer Left (Sidebar Width)
+    if (resizerLeft && sidebar) {
+      let isDragging = false;
+      resizerLeft.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        resizerLeft.classList.add('resizing');
+        document.body.classList.add('resizing-active');
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const activityBarWidth = 48;
+        const newWidth = Math.max(160, Math.min(600, e.clientX - activityBarWidth));
+        sidebar.style.width = `${newWidth}px`;
+        this.editor?.layout();
+        this.diffEditor?.layout();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          resizerLeft.classList.remove('resizing');
+          document.body.classList.remove('resizing-active');
+          this.editor?.layout();
+          this.diffEditor?.layout();
+        }
+      });
+    }
+
+    // 2. Resizer Right (AI Studio Width)
+    if (resizerRight && copilot) {
+      let isDragging = false;
+      resizerRight.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        resizerRight.classList.add('resizing');
+        document.body.classList.add('resizing-active');
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const newWidth = Math.max(260, Math.min(750, window.innerWidth - e.clientX));
+        copilot.style.width = `${newWidth}px`;
+        this.editor?.layout();
+        this.diffEditor?.layout();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          resizerRight.classList.remove('resizing');
+          document.body.classList.remove('resizing-active');
+          this.editor?.layout();
+          this.diffEditor?.layout();
+        }
+      });
+    }
+
+    // 3. Resizer Bottom (Terminal Height)
+    if (resizerBottom && terminal) {
+      let isDragging = false;
+      resizerBottom.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        resizerBottom.classList.add('resizing');
+        document.body.classList.add('resizing-active');
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const statusbarHeight = 26;
+        const newHeight = Math.max(100, Math.min(600, window.innerHeight - statusbarHeight - e.clientY));
+        terminal.style.height = `${newHeight}px`;
+        this.editor?.layout();
+        this.diffEditor?.layout();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          resizerBottom.classList.remove('resizing');
+          document.body.classList.remove('resizing-active');
+          this.editor?.layout();
+          this.diffEditor?.layout();
+        }
+      });
+    }
+  },
+
+  setupSafetyApprovalGate() {
+    this.safetyMode = 'ask'; // 'ask' | 'auto'
+    const btnToggle = document.getElementById('btn-toggle-safety-mode');
+    const modeText = document.getElementById('safety-mode-text');
+    const modeIcon = document.getElementById('safety-mode-icon');
+
+    if (btnToggle) {
+      btnToggle.addEventListener('click', () => {
+        if (this.safetyMode === 'ask') {
+          this.safetyMode = 'auto';
+          if (modeText) modeText.innerHTML = 'Lệnh: <b>Tự động chạy</b>';
+          if (modeIcon) modeIcon.textContent = '⚡';
+          this.showToast({
+            title: 'Chế độ Duyệt Lệnh',
+            message: 'Đã chuyển sang chế độ Tự động chạy (Auto-run) — Agent sẽ tự thực thi các lệnh mà không cần dừng lại hỏi.',
+            type: 'info'
+          });
+        } else {
+          this.safetyMode = 'ask';
+          if (modeText) modeText.innerHTML = 'Lệnh: <b>Hỏi trước khi chạy</b>';
+          if (modeIcon) modeIcon.textContent = '🛡️';
+          this.showToast({
+            title: 'Chế độ Duyệt Lệnh',
+            message: 'Đã bật chế độ Bảo vệ (Ask for Confirmation) — Agent sẽ hỏi ý kiến cậu trước khi chạy lệnh console hoặc sửa đổi file.',
+            type: 'success'
+          });
+        }
+      });
+    }
+  },
+
+  setupModelHub() {
+    const selectModel = document.getElementById('select-agent-model');
+    const modelIcon = document.getElementById('agent-model-icon');
+    const btnUndo = document.getElementById('btn-undo-agent-action');
+    const sbStatus = document.getElementById('sb-ai-status');
+
+    if (selectModel) {
+      selectModel.addEventListener('change', async () => {
+        this.selectedModel = selectModel.value;
+
+        if (this.selectedModel === 'ollama-local') {
+          if (modelIcon) modelIcon.textContent = '🦙';
+          const res = await window.AisaHorizon?.checkOllama();
+          if (res && res.online) {
+            const names = (res.models || []).map(m => m.name).join(', ') || 'qwen2.5-coder';
+            if (sbStatus) sbStatus.textContent = `● Ollama Local Online (${res.models.length} models)`;
+            this.showToast({
+              title: 'Ollama Local AI (0đ)',
+              message: `Đã kết nối thành công Ollama! Tìm thấy ${res.models.length} model: ${names}. Hoạt động 100% offline trên GPU không tốn 1 xu và không cần API Key!`,
+              type: 'success'
+            });
+          } else {
+            if (sbStatus) sbStatus.textContent = '○ Ollama Offline (localhost:11434)';
+            this.showToast({
+              title: 'Ollama Chưa Khởi Chạy',
+              message: 'Không phát hiện Ollama trên http://localhost:11434. Cậu hãy bật Ollama để dùng Local AI không cần API key nhé!',
+              type: 'warning'
+            });
+          }
+        } else if (this.selectedModel === 'mhent-proxy') {
+          if (modelIcon) modelIcon.textContent = '🌐';
+          if (sbStatus) sbStatus.textContent = '● MHEnt Cloud Proxy Account';
+          this.showToast({
+            title: 'MHEnt Cloud Account',
+            message: 'Đã kích hoạt chế độ Tài khoản Đám mây MHEnt Universe (Tương tự Antigravity/Cursor) — Sử dụng hạn ngạch đám mây tập trung!',
+            type: 'info'
+          });
+        } else if (this.selectedModel === 'custom-key') {
+          if (modelIcon) modelIcon.textContent = '🔑';
+          const key = prompt('Nhập Gemini API Key cá nhân của cậu:', this.geminiKey || '');
+          if (key !== null && key.trim()) {
+            this.geminiKey = key.trim();
+            localStorage.setItem('mhent_ai_api_key', this.geminiKey);
+            this.showToast({
+              title: 'API Key Cá nhân',
+              message: 'Đã lưu Gemini API Key cá nhân thành công!',
+              type: 'success'
+            });
+          }
+        } else if (this.selectedModel === 'gemini-2.0-pro') {
+          if (modelIcon) modelIcon.textContent = '🧠';
+          if (sbStatus) sbStatus.textContent = '● Gemini 2.0 Pro Exp Online';
+        } else {
+          if (modelIcon) modelIcon.textContent = '🌟';
+          if (sbStatus) sbStatus.textContent = '● Gemini 2.0 Flash Online';
+        }
+      });
+    }
+
+    if (btnUndo) {
+      btnUndo.addEventListener('click', async () => {
+        const res = await window.AisaHorizon?.undoLastAgentAction();
+        if (res && res.success) {
+          this.showToast({
+            title: 'Hoàn Tác An Toàn',
+            message: res.message,
+            type: 'success'
+          });
+          this.printTerminal(`\n✔ [Rollback] ${res.message}`, '#10b981');
+          this.mascotSay(`🌸 Harmony: Đã hoàn tác an toàn tệp ${res.restoredFile ? res.restoredFile.split(/[\\/]/).pop() : ''} rồi nhé Yurika!`);
+          await this.refreshFileTree();
+          await this.refreshGitStatus();
+          if (this.activeTabPath && res.restoredFile && this.activeTabPath.toLowerCase().endsWith(res.restoredFile.split(/[\\/]/).pop().toLowerCase())) {
+            const readFileRes = await window.AisaHorizon?.readFile(this.activeTabPath);
+            if (readFileRes && readFileRes.success && this.editor) {
+              this.editor.setValue(readFileRes.content);
+            }
+          }
+        } else {
+          this.showToast({
+            title: 'Hoàn Tác',
+            message: res?.message || 'Không có bản sao lưu snapshot nào gần đây.',
+            type: 'info'
+          });
+        }
+      });
+    }
+  },
+
+  setupWelcomeScreen() {
+    document.getElementById('card-welcome-new-file')?.addEventListener('click', () => this.createNewFilePrompt());
+    document.getElementById('card-welcome-open-folder')?.addEventListener('click', () => document.getElementById('btn-change-workspace')?.click());
+    document.getElementById('card-welcome-quick-open')?.addEventListener('click', () => this.openQuickOpen());
+    document.getElementById('card-welcome-agent')?.addEventListener('click', () => document.getElementById('btn-toggle-secondary-sidebar')?.click());
+    document.getElementById('card-welcome-terminal')?.addEventListener('click', () => document.getElementById('btn-toggle-bottom-panel')?.click());
+    document.getElementById('card-welcome-inline-ai')?.addEventListener('click', () => this.openInlineAI());
+  },
+
+  showToast({ title = 'AISA Horizon', message = '', type = 'info', actions = [], duration = 5000 }) {
+    const container = document.getElementById('horizon-toast-container');
+    if (!container) return null;
+
+    const toast = document.createElement('div');
+    toast.className = 'horizon-toast';
+
+    const header = document.createElement('div');
+    header.className = 'toast-header';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'toast-title';
+    const icon = type === 'success' ? '✔' : type === 'warning' ? '⚠' : type === 'error' ? '✖' : '🌸';
+    titleEl.innerHTML = `<span>${icon}</span><span>${title}</span>`;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'toast-close';
+    closeBtn.textContent = '✕';
+    closeBtn.onclick = () => dismiss();
+
+    header.appendChild(titleEl);
+    header.appendChild(closeBtn);
+    toast.appendChild(header);
+
+    if (message) {
+      const body = document.createElement('div');
+      body.className = 'toast-body';
+      body.textContent = message;
+      toast.appendChild(body);
+    }
+
+    if (actions && actions.length > 0) {
+      const actRow = document.createElement('div');
+      actRow.className = 'toast-actions';
+      actions.forEach(act => {
+        const btn = document.createElement('button');
+        btn.className = `toast-btn ${act.primary ? 'btn-primary' : ''}`;
+        btn.textContent = act.label;
+        btn.onclick = () => {
+          act.callback?.();
+          dismiss();
+        };
+        actRow.appendChild(btn);
+      });
+      toast.appendChild(actRow);
+    }
+
+    const dismiss = () => {
+      toast.classList.add('hiding');
+      setTimeout(() => toast.remove(), 250);
+    };
+
+    if (duration > 0) {
+      setTimeout(dismiss, duration);
+    }
+
+    container.appendChild(toast);
+    return toast;
   },
 
   setupDropdownMenus() {
@@ -251,12 +609,14 @@ window.AisaHorizonApp = {
     if (!this.activeTabPath) {
       if (breadcrumbCurrent) breadcrumbCurrent.textContent = 'Chưa mở tệp';
       if (contextActive) contextActive.textContent = 'Chưa chọn tệp';
+      this.updateWindowTitle();
       return;
     }
 
     const relPath = this.activeTabPath.replace(this.activeWorkspace, '').replace(/^[\\/]/, '');
     if (breadcrumbCurrent) breadcrumbCurrent.textContent = relPath.replace(/\\/g, ' / ');
     if (contextActive) contextActive.textContent = relPath.split(/[\\/]/).pop();
+    this.updateWindowTitle();
   },
 
   // ==========================================================================
@@ -700,7 +1060,7 @@ window.AisaHorizonApp = {
       tab.isDirty = false;
       this.renderTabs();
       this.printTerminal(`✔ Đã lưu tệp: ${tab.name}`, '#10b981');
-      this.mascotSay(`🌸 Harmony: Đã lưu an toàn tệp [${tab.name}] rồi nhé Sakura! ✨`);
+      this.mascotSay(`🌸 Harmony: Đã lưu an toàn tệp [${tab.name}] rồi nhé Yurika! ✨`);
       this.refreshGitStatus();
     } else {
       alert('Lỗi lưu tệp: ' + res.error);
@@ -1115,7 +1475,7 @@ window.AisaHorizonApp = {
         if (msgInput) msgInput.value = '';
         await this.refreshGitStatus();
         await this.loadGitHistory();
-        this.mascotSay('😈 Echo: Commit ngon lành rồi đó Sakura! Tiếp tục chiến nào! ✨');
+        this.mascotSay('😈 Echo: Commit ngon lành rồi đó Yurika! Tiếp tục chiến nào! ✨');
       } else {
         this.printTerminal(res?.error || res?.stderr || 'Lỗi khi commit', '#ef4444');
       }
@@ -1137,7 +1497,7 @@ window.AisaHorizonApp = {
         this.printTerminal(res.stdout || '✔ Push thành công lên GitHub!', '#10b981');
         await this.refreshGitStatus();
         await this.loadGitHistory();
-        this.mascotSay('🌸 Harmony: Đã đồng bộ mã nguồn lên đám mây an toàn rồi nha Sakura! ✨');
+        this.mascotSay('🌸 Harmony: Đã đồng bộ mã nguồn lên đám mây an toàn rồi nha Yurika! ✨');
       } else {
         this.printTerminal(res?.error || res?.stderr || 'Lỗi khi push git', '#ef4444');
       }
@@ -1319,16 +1679,80 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 9. INTEGRATED TERMINAL
+  // 9. INTEGRATED TERMINAL (STREAMING PTY & ANSI ACCELERATED)
   // ==========================================================================
+  formatAnsiToHtml(rawText) {
+    if (!rawText) return '';
+    let html = rawText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    html = html
+      .replace(/\x1b\[1m/g, '<span class="ansi-bold">')
+      .replace(/\x1b\[2m/g, '<span class="ansi-dim">')
+      .replace(/\x1b\[31m/g, '<span class="ansi-red">')
+      .replace(/\x1b\[32m/g, '<span class="ansi-green">')
+      .replace(/\x1b\[33m/g, '<span class="ansi-yellow">')
+      .replace(/\x1b\[34m/g, '<span class="ansi-cyan">')
+      .replace(/\x1b\[35m/g, '<span class="ansi-purple">')
+      .replace(/\x1b\[36m/g, '<span class="ansi-cyan">')
+      .replace(/\x1b\[37m/g, '<span style="color:#f1f5f9">')
+      .replace(/\x1b\[90m/g, '<span class="ansi-dim">')
+      .replace(/\x1b\[0m/g, '</span>')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+
+    return html;
+  },
+
+  printTerminalHtml(html) {
+    const container = document.getElementById('terminal-output-container');
+    if (!container) return;
+    const line = document.createElement('div');
+    line.innerHTML = html;
+    container.appendChild(line);
+    container.scrollTop = container.scrollHeight;
+  },
+
   setupTerminal() {
     const input = document.getElementById('terminal-input');
     const btnClear = document.getElementById('btn-clear-terminal');
+    const btnStop = document.getElementById('btn-stop-terminal');
     const btnClose = document.getElementById('btn-close-terminal');
     const termPanel = document.getElementById('terminal-panel');
+    const runningBadge = document.getElementById('terminal-running-badge');
 
     let history = [];
     let historyIdx = -1;
+
+    // Listen to real-time streaming data from main process
+    if (window.AisaHorizon?.onTerminalStreamData) {
+      window.AisaHorizon.onTerminalStreamData(({ type, text }) => {
+        if (type === 'stderr') {
+          this.printTerminalHtml(`<span class="ansi-red">${this.formatAnsiToHtml(text)}</span>`);
+        } else {
+          this.printTerminalHtml(this.formatAnsiToHtml(text));
+        }
+      });
+    }
+
+    if (window.AisaHorizon?.onTerminalStreamExit) {
+      window.AisaHorizon.onTerminalStreamExit(({ code }) => {
+        if (runningBadge) runningBadge.style.display = 'none';
+        if (btnStop) btnStop.style.display = 'none';
+        const color = code === 0 ? '#34d399' : '#f87171';
+        this.printTerminal(`[Process completed with exit code ${code}]`, color);
+      });
+    }
+
+    if (btnStop) {
+      btnStop.addEventListener('click', async () => {
+        await window.AisaHorizon?.stopCommand();
+        if (runningBadge) runningBadge.style.display = 'none';
+        btnStop.style.display = 'none';
+        this.printTerminal('\n[Process terminated by user (Ctrl+C)]', '#ef4444');
+      });
+    }
 
     if (input) {
       input.addEventListener('keydown', async (e) => {
@@ -1361,12 +1785,19 @@ window.AisaHorizonApp = {
             return;
           }
 
-          if (window.AisaHorizon) {
+          if (runningBadge) runningBadge.style.display = 'inline-block';
+          if (btnStop) btnStop.style.display = 'inline-flex';
+
+          if (window.AisaHorizon?.runCommandStream) {
+            await window.AisaHorizon.runCommandStream(cmd, this.activeWorkspace);
+          } else if (window.AisaHorizon?.runCommand) {
             const res = await window.AisaHorizon.runCommand(cmd, this.activeWorkspace);
+            if (runningBadge) runningBadge.style.display = 'none';
+            if (btnStop) btnStop.style.display = 'none';
             if (res.stdout) this.printTerminal(res.stdout, '#cbd5e1');
             if (res.stderr) {
               this.printTerminal(res.stderr, '#f87171');
-              this.mascotSay('😈 Echo: Terminal báo lỗi kìa Sakura ơi! Kiểm tra lại cú pháp xem sao! 😈');
+              this.mascotSay('😈 Echo: Terminal báo lỗi kìa Yurika ơi! Kiểm tra lại cú pháp xem sao! 😈');
             }
           }
         }
@@ -1378,6 +1809,7 @@ window.AisaHorizonApp = {
       btnClose.addEventListener('click', () => {
         termPanel.style.display = 'none';
         document.getElementById('act-btn-terminal')?.classList.remove('active');
+        document.getElementById('btn-toggle-bottom-panel')?.classList.remove('active');
       });
     }
   },
@@ -1515,80 +1947,367 @@ window.AisaHorizonApp = {
     }
   },
 
-  async askAgent(userPrompt) {
-    this.appendAgentMessage('user', 'Sakura', userPrompt);
+  getAgentToolDeclarations() {
+    return [
+      {
+        name: 'read_file',
+        description: 'Đọc nội dung một tệp văn bản từ không gian làm việc.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            filePath: { type: 'STRING', description: 'Đường dẫn tệp tương đối hoặc tuyệt đối' },
+            startLine: { type: 'INTEGER', description: 'Dòng bắt đầu (1-indexed)' },
+            endLine: { type: 'INTEGER', description: 'Dòng kết thúc (1-indexed)' }
+          },
+          required: ['filePath']
+        }
+      },
+      {
+        name: 'write_to_file',
+        description: 'Ghi hoặc tạo mới một tệp với nội dung đầy đủ (tự động tạo backup snapshot).',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            filePath: { type: 'STRING', description: 'Đường dẫn tệp cần ghi' },
+            content: { type: 'STRING', description: 'Nội dung đầy đủ của tệp' }
+          },
+          required: ['filePath', 'content']
+        }
+      },
+      {
+        name: 'replace_file_content',
+        description: 'Thay thế một đoạn mã chính xác trong tệp bằng đoạn mã mới (tự động tạo backup snapshot).',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            filePath: { type: 'STRING', description: 'Đường dẫn tệp cần sửa' },
+            targetContent: { type: 'STRING', description: 'Đoạn mã hiện tại cần thay thế (phải khớp chính xác)' },
+            replacementContent: { type: 'STRING', description: 'Đoạn mã mới thay thế vào' }
+          },
+          required: ['filePath', 'targetContent', 'replacementContent']
+        }
+      },
+      {
+        name: 'list_dir',
+        description: 'Liệt kê danh sách các tệp và thư mục con trong thư mục.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            dirPath: { type: 'STRING', description: 'Đường dẫn thư mục (để trống nếu muốn đọc thư mục gốc)' }
+          }
+        }
+      },
+      {
+        name: 'grep_search',
+        description: 'Tìm kiếm chuỗi hoặc từ khóa trên toàn bộ dự án.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            query: { type: 'STRING', description: 'Từ khóa cần tìm' },
+            isCaseSensitive: { type: 'BOOLEAN', description: 'Phân biệt hoa thường' }
+          },
+          required: ['query']
+        }
+      },
+      {
+        name: 'run_command',
+        description: 'Thực thi một câu lệnh trong Terminal PowerShell của dự án.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            command: { type: 'STRING', description: 'Lệnh cần chạy (ví dụ: npm test, git status...)' },
+            cwd: { type: 'STRING', description: 'Thư mục thực thi lệnh (mặc định là thư mục workspace)' }
+          },
+          required: ['command']
+        }
+      }
+    ];
+  },
 
-    const apiKey = this.geminiKey || localStorage.getItem('mhent_ai_api_key');
-    if (!apiKey) {
-      this.appendAgentMessage('harmony', '🌸 Harmony', 'Cậu ơi, chưa có Gemini API Key! Cậu bấm vào icon Bánh răng Cài đặt ở thanh bên trái để nhập key nhé!');
-      return;
+  async requestToolApproval(toolName, args) {
+    if (['read_file', 'list_dir', 'grep_search'].includes(toolName)) {
+      return true;
     }
+
+    if (this.safetyMode === 'auto') {
+      return true;
+    }
+
+    return new Promise((resolve) => {
+      const container = document.getElementById('copilot-messages');
+      if (!container) return resolve(true);
+
+      const card = document.createElement('div');
+      card.className = 'agent-tool-card pending';
+
+      const header = document.createElement('div');
+      header.className = 'tool-card-header';
+      const label = toolName === 'run_command'
+        ? '⚡ Yêu cầu chạy Terminal'
+        : toolName === 'write_to_file'
+          ? '📄 Yêu cầu tạo/ghi tệp'
+          : '📝 Yêu cầu sửa đổi tệp';
+      header.innerHTML = `<span>${label}</span><span class="tool-card-badge">Chờ duyệt</span>`;
+
+      const preview = document.createElement('div');
+      preview.className = 'tool-card-preview';
+      if (toolName === 'run_command') {
+        preview.textContent = `$ ${args.command}`;
+      } else if (toolName === 'replace_file_content') {
+        preview.textContent = `[Tệp: ${args.filePath}]\n--- Cần thay thế:\n${(args.targetContent || '').slice(0, 300)}\n+++ Thay bằng:\n${(args.replacementContent || '').slice(0, 300)}`;
+      } else if (toolName === 'write_to_file') {
+        preview.textContent = `[Tệp: ${args.filePath}]\n${(args.content || '').slice(0, 400)}...`;
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'tool-card-actions';
+
+      const btnAllow = document.createElement('button');
+      btnAllow.className = 'tool-btn-allow';
+      btnAllow.textContent = '✔ Cho phép (Allow)';
+      btnAllow.onclick = () => {
+        card.className = 'agent-tool-card executed';
+        header.querySelector('.tool-card-badge').textContent = 'Đã duyệt';
+        header.querySelector('.tool-card-badge').style.color = '#34d399';
+        actions.remove();
+        resolve(true);
+      };
+
+      const btnDeny = document.createElement('button');
+      btnDeny.className = 'tool-btn-deny';
+      btnDeny.textContent = '✕ Từ chối (Deny)';
+      btnDeny.onclick = () => {
+        card.className = 'agent-tool-card denied';
+        header.querySelector('.tool-card-badge').textContent = 'Bị từ chối';
+        header.querySelector('.tool-card-badge').style.color = '#ef4444';
+        actions.remove();
+        resolve(false);
+      };
+
+      const btnAlways = document.createElement('button');
+      btnAlways.className = 'safety-mode-btn';
+      btnAlways.textContent = '⚡ Luôn cho phép (Auto)';
+      btnAlways.onclick = () => {
+        document.getElementById('btn-toggle-safety-mode')?.click();
+        card.className = 'agent-tool-card executed';
+        header.querySelector('.tool-card-badge').textContent = 'Tự động duyệt';
+        actions.remove();
+        resolve(true);
+      };
+
+      actions.appendChild(btnAllow);
+      actions.appendChild(btnDeny);
+      actions.appendChild(btnAlways);
+
+      card.appendChild(header);
+      card.appendChild(preview);
+      card.appendChild(actions);
+
+      container.appendChild(card);
+      container.scrollTop = container.scrollHeight;
+    });
+  },
+
+  async executeAgentTool(toolName, args) {
+    if (!window.AisaHorizon?.agentExecuteTool) {
+      return { success: false, error: 'Desktop bridge không hỗ trợ agentExecuteTool.' };
+    }
+
+    const res = await window.AisaHorizon.agentExecuteTool(toolName, args);
+
+    if (['write_to_file', 'replace_file_content'].includes(toolName) && res.success) {
+      this.refreshFileTree();
+      this.refreshGitStatus();
+
+      const targetPath = args.filePath;
+      const tab = this.openTabs.find(t => t.path && (t.path === targetPath || t.path.endsWith(targetPath.replace(/\//g, '\\')) || targetPath.endsWith(t.path)));
+      if (tab) {
+        const fileData = await window.AisaHorizon.readFile(tab.path);
+        if (fileData.success && this.editor && this.activeTabPath === tab.path) {
+          tab.content = fileData.content;
+          tab.isDirty = false;
+          this.editor.setValue(fileData.content);
+          this.renderTabs();
+        }
+      }
+    }
+
+    if (toolName === 'run_command') {
+      const termPanel = document.getElementById('terminal-panel');
+      if (termPanel && termPanel.style.display === 'none') {
+        termPanel.style.display = 'flex';
+        document.getElementById('btn-toggle-bottom-panel')?.classList.add('active');
+      }
+      this.printTerminal(`\n[Agent Execution] ${args.command}`, '#38bdf8');
+      if (res.stdout) this.printTerminal(res.stdout, '#cbd5e1');
+      if (res.stderr) this.printTerminal(res.stderr, '#f87171');
+    }
+
+    return res;
+  },
+
+  async runOllamaAgentLoop(userPrompt, fileContext) {
+    this.appendAgentMessage('harmony', '🦙 Ollama Local', 'Đang kết nối tới mô hình AI Local trên máy tính (0đ / Miễn phí 100%)...');
+    try {
+      const res = await fetch('http://localhost:11434/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'qwen2.5-coder:7b',
+          messages: [
+            {
+              role: 'system',
+              content: 'Bạn là Trợ lý AI lập trình trong AISA Horizon IDE. Đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika. Trả lời chi tiết, xuất mã nguồn chuẩn xác bằng tiếng Việt.'
+            },
+            {
+              role: 'user',
+              content: fileContext + userPrompt
+            }
+          ],
+          stream: false
+        })
+      });
+
+      if (!res.ok) throw new Error(`Ollama phản hồi mã HTTP ${res.status}`);
+      const data = await res.json();
+      const output = data.message?.content || '';
+      this.appendAgentAccordion('Xử lý bởi GPU / CPU nội bộ (Ollama Local)', output);
+    } catch (e) {
+      this.appendAgentMessage('echo', '😈 Echo', `Không thể gửi tới Ollama (${e.message}). Cậu đảm bảo Ollama đang chạy ở cổng 11434 nhé!`);
+    }
+  },
+
+  async askAgent(userPrompt) {
+    this.appendAgentMessage('user', 'Yorutsuki Yurika', userPrompt);
 
     const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
     const fileContext = currentTab && !currentTab.isMedia && !currentTab.isBinary ? `\n[Tệp đang mở: ${currentTab.name} (${currentTab.path})]\n` : '';
 
-    let systemPrompt = '';
-    if (this.currentMode === 'agent') {
-      systemPrompt = `Bạn là Google Antigravity-style Autonomous AI Agent trong AISA Horizon IDE của Miyazaki Haruto Entertainment Co., Ltd.
-Đồng hành cùng Nhà sáng lập Sakura (Yurika).
-ĐẶC ĐIỂM:
-1. Bạn phải xuất ra quá trình suy nghĩ chi tiết theo định dạng:
-<thought>
-[Các bước suy nghĩ phân tích kiến trúc, rà soát logic, kế hoạch thực thi...]
-</thought>
-2. Sau thẻ thought, xuất câu trả lời súc tích và đoạn mã hoàn thiện (trong khối markdown \`\`\`ngôn_ngữ ... \`\`\`) bằng tiếng Việt.`;
-    } else if (this.currentMode === 'chat') {
-      systemPrompt = `Bạn là hệ thống AI Duo Copilot (Harmony 🌸 & Echo 😈) trong Horizon IDE.
-- HARMONY 🌸: Dịu dàng, giải thích chi tiết, ân cần hướng dẫn logic.
-- ECHO 😈: Sắc bén, tsundere, bắt lỗi siêu tốc, đề xuất giải pháp tối ưu.
-Xuất định dạng:
-HARMONY: [Nội dung giải thích]
-ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
-    } else {
-      systemPrompt = `Bạn là AI Code Reviewer. So sánh và xuất diff trước và sau khi tối ưu hóa hoặc chỉnh sửa mã nguồn. Sử dụng khối diff markdown.`;
+    if (this.selectedModel === 'ollama-local') {
+      await this.runOllamaAgentLoop(userPrompt, fileContext);
+      return;
     }
 
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: fileContext + userPrompt }] }],
-          generationConfig: { maxOutputTokens: 2048, temperature: 0.7 }
-        })
-      });
+    let apiKey = this.geminiKey || localStorage.getItem('mhent_ai_api_key');
+    if (!apiKey) {
+      apiKey = await window.AisaHorizon?.getApiKey();
+    }
+    if (!apiKey && this.selectedModel !== 'mhent-proxy') {
+      this.appendAgentMessage('harmony', '🌸 Harmony', 'Cậu ơi, chưa có Gemini API Key! Cậu chọn "🦙 Ollama Local" ở thanh chọn model bên trên để dùng miễn phí không cần key, hoặc bấm vào "🔑 Tự nhập API Key" nhé! ✨');
+      return;
+    }
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const rawOutput = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const modelName = this.selectedModel === 'gemini-2.0-pro' ? 'gemini-2.0-pro-exp-02-05' : 'gemini-2.0-flash';
+    const systemPrompt = `Bạn là Google Antigravity-style Autonomous AI Agent trong AISA Horizon IDE của Miyazaki Haruto Entertainment Co., Ltd.
+Đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika.
+ĐẶC ĐIỂM QUAN TRỌNG:
+1. Bạn có đầy đủ công cụ thực thi: read_file, write_to_file, replace_file_content, list_dir, grep_search, run_command.
+2. Khi người dùng giao nhiệm vụ tạo, sửa code, refactor, kiểm tra lỗi hoặc chạy terminal, bạn hãy CHỦ ĐỘNG GỌI CÔNG CỤ để thực thi trực tiếp, không chỉ nói suông!
+3. Luôn suy nghĩ kỹ lưỡng phân tích kiến trúc trước khi hành động:
+<thought>
+[Kế hoạch thực thi, rà soát logic...]
+</thought>
+4. Sử dụng tiếng Việt thân thiện, chuyên nghiệp, chính xác.`;
 
-      if (this.currentMode === 'agent') {
-        const thoughtMatch = rawOutput.match(/<thought>([\s\S]*?)<\/thought>/i);
-        const thoughtText = thoughtMatch ? thoughtMatch[1].trim() : 'Đã phân tích cấu trúc mã nguồn và ngữ cảnh tệp...';
-        const finalAnswer = rawOutput.replace(/<thought>[\s\S]*?<\/thought>/i, '').trim();
+    const contents = [
+      { role: 'user', parts: [{ text: fileContext + userPrompt }] }
+    ];
 
-        this.appendAgentAccordion(thoughtText, finalAnswer);
-      } else if (this.currentMode === 'chat') {
-        const hMatch = rawOutput.match(/HARMONY:\s*([\s\S]*?)(?=ECHO:|$)/i);
-        const eMatch = rawOutput.match(/ECHO:\s*([\s\S]*?)$/i);
+    const tools = [{ functionDeclarations: this.getAgentToolDeclarations() }];
 
-        if (hMatch && hMatch[1].trim()) {
-          this.appendAgentMessage('harmony', '🌸 Harmony', hMatch[1].trim());
+    let turn = 0;
+    const maxTurns = 6;
+
+    while (turn < maxTurns) {
+      turn++;
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents,
+            tools: this.currentMode === 'agent' ? tools : undefined,
+            generationConfig: { maxOutputTokens: 4096, temperature: 0.4 }
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${res.status}`);
         }
-        if (eMatch && eMatch[1].trim()) {
-          this.appendAgentMessage('echo', '😈 Echo', eMatch[1].trim());
+
+        const data = await res.json();
+        const candidate = data.candidates?.[0];
+        if (!candidate || !candidate.content) {
+          this.appendAgentMessage('echo', '😈 Echo', 'Không nhận được phản hồi từ model. Thử lại xem sao nhé!');
+          break;
         }
-        if (!hMatch && !eMatch) {
-          this.appendAgentMessage('harmony', '🌸 Harmony', rawOutput);
+
+        const parts = candidate.content.parts || [];
+        let hasFunctionCall = false;
+
+        for (const part of parts) {
+          if (part.text) {
+            const rawOutput = part.text;
+            if (this.currentMode === 'agent') {
+              const thoughtMatch = rawOutput.match(/<thought>([\s\S]*?)<\/thought>/i);
+              const thoughtText = thoughtMatch ? thoughtMatch[1].trim() : '';
+              const finalAnswer = rawOutput.replace(/<thought>[\s\S]*?<\/thought>/i, '').trim();
+              if (thoughtText || finalAnswer) {
+                this.appendAgentAccordion(thoughtText || 'Phân tích các bước thực thi...', finalAnswer || rawOutput);
+              }
+            } else {
+              this.appendAgentMessage('harmony', '🌸 Harmony', rawOutput);
+            }
+          }
+
+          if (part.functionCall) {
+            hasFunctionCall = true;
+            const call = part.functionCall;
+            const toolName = call.name;
+            const args = call.args || {};
+
+            const isApproved = await this.requestToolApproval(toolName, args);
+
+            let toolResult = null;
+            if (isApproved) {
+              toolResult = await this.executeAgentTool(toolName, args);
+            } else {
+              toolResult = { success: false, error: 'Hành động đã bị Nhà sáng lập Yorutsuki Yurika từ chối.' };
+              this.showToast({
+                title: 'Lệnh Bị Từ Chối',
+                message: `Cậu đã từ chối thực thi công cụ: ${toolName}`,
+                type: 'warning'
+              });
+            }
+
+            contents.push({
+              role: 'model',
+              parts: [{ functionCall: call }]
+            });
+
+            contents.push({
+              role: 'user',
+              parts: [{
+                functionResponse: {
+                  name: toolName,
+                  response: { content: toolResult }
+                }
+              }]
+            });
+          }
         }
-      } else {
-        this.appendAgentMessage('harmony', '🔍 Code Review', rawOutput);
+
+        if (!hasFunctionCall) {
+          break;
+        }
+
+      } catch (err) {
+        this.appendAgentMessage('echo', '😈 Echo', `Lỗi ReAct Agent: ${err.message}! Cậu kiểm tra lại mạng hoặc API Key nha. 😈`);
+        break;
       }
-
-    } catch (err) {
-      this.appendAgentMessage('echo', '😈 Echo', `Lỗi kết nối API: ${err.message}! Kiểm tra mạng hoặc API Key giúp em nha. 😈`);
     }
   },
 
@@ -1718,7 +2437,7 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
           forceMoveMarkers: true
         }]);
         this.printTerminal('✔ Đã chèn mã do AI tạo vào Editor!', '#10b981');
-        this.mascotSay('🌸 Harmony: Đã chèn mã thành công rồi nhé Sakura! ✨');
+        this.mascotSay('🌸 Harmony: Đã chèn mã thành công rồi nhé Yurika! ✨');
       }
       widget.style.display = 'none';
       if (this.editor) this.editor.focus();
@@ -1972,7 +2691,7 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
     document.getElementById('ctx-delete-file')?.addEventListener('click', async () => {
       if (!this.selectedContextPath) return;
       const name = this.selectedContextPath.split(/[\\/]/).pop();
-      if (confirm(`Sakura có chắc chắn muốn xóa [${name}] không?`)) {
+      if (confirm(`Yurika có chắc chắn muốn xóa [${name}] không?`)) {
         const res = await window.AisaHorizon?.deletePath(this.selectedContextPath);
         if (res && res.success) {
           this.closeTab(this.selectedContextPath);
@@ -2011,9 +2730,9 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
 
     harmonyCard?.addEventListener('click', () => {
       const quotes = [
-        '🌸 Harmony: Sakura cứ vững tâm code nhé, có em luôn ở đây hỗ trợ cậu! ✨',
+        '🌸 Harmony: Yurika cứ vững tâm code nhé, có em luôn ở đây hỗ trợ cậu! ✨',
         '🌸 Harmony: Đừng quên uống nước và chớp mắt nghỉ ngơi một chút nha cậu! 🍵',
-        '🌸 Harmony: Mã nguồn hôm nay viết rất đẹp và trong trẻo luôn đó Sakura! 💖',
+        '🌸 Harmony: Mã nguồn hôm nay viết rất đẹp và trong trẻo luôn đó Yurika! 💖',
         '🌸 Harmony: Nếu gặp bug khó, cứ gọi tụi em phân tích chi tiết cho cậu nhé! 🌸'
       ];
       this.mascotSay(quotes[Math.floor(Math.random() * quotes.length)]);
@@ -2067,6 +2786,12 @@ ECHO: [Nội dung phản biện/tối ưu mã nguồn]`;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         this.openInlineAI();
+      }
+
+      // Ctrl + B (Toggle Left Primary Sidebar)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        document.getElementById('btn-toggle-primary-sidebar')?.click();
       }
 
       // Ctrl + ` (Terminal)

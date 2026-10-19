@@ -17,7 +17,7 @@
     "agent",
     "mhent-universe"
   ],
-  "author": "Miyazaki Haruto Entertainment Co., Ltd.",
+  "author": "Yorutsuki Yurika (Miyazaki Haruto Entertainment Co., Ltd.)",
   "license": "UNLICENSED",
   "devDependencies": {
     "electron": "^30.5.1",

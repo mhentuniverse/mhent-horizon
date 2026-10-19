@@ -389,10 +389,64 @@ ipcMain.handle('horizon:list-all-files', async () => {
   }
 });
 
-// Global Text Search across Workspace Files
+const rgPath = path.join(__dirname, '..', 'bin', 'rg.exe');
+
+async function executeRipgrep(query, { isCaseSensitive = false, isRegex = false, maxMatches = 200 } = {}) {
+  if (!fs.existsSync(rgPath)) return null;
+  return new Promise((resolve) => {
+    const flags = ['--json', '--line-number', '-m', String(maxMatches)];
+    if (!isCaseSensitive) flags.push('-i');
+    if (!isRegex) flags.push('-F');
+    flags.push('-e', query, '.');
+
+    exec(`"${rgPath}" ${flags.map(f => `"${f.replace(/"/g, '\\"')}"`).join(' ')}`, {
+      cwd: activeWorkspacePath,
+      shell: 'powershell.exe',
+      maxBuffer: 15 * 1024 * 1024
+    }, (err, stdout) => {
+      if (!stdout) return resolve([]);
+      const fileMap = new Map();
+      let totalMatches = 0;
+      const lines = stdout.split(/\r?\n/);
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.type === 'match' && parsed.data) {
+            const relPath = (parsed.data.path?.text || '').replace(/^(\.[\\/])*/, '');
+            const fullPath = path.resolve(activeWorkspacePath, relPath);
+            if (!fileMap.has(fullPath)) {
+              fileMap.set(fullPath, {
+                fullPath,
+                relativePath: relPath,
+                name: path.basename(fullPath),
+                matches: []
+              });
+            }
+            fileMap.get(fullPath).matches.push({
+              lineNumber: parsed.data.line_number,
+              lineContent: (parsed.data.lines?.text || '').trim()
+            });
+            totalMatches++;
+            if (totalMatches >= maxMatches) break;
+          }
+        } catch (e) {}
+      }
+      resolve(Array.from(fileMap.values()));
+    });
+  });
+}
+
+// Global Text Search across Workspace Files (Ripgrep-accelerated)
 ipcMain.handle('horizon:search-files', async (event, { query, isRegex = false, isCaseSensitive = false }) => {
   if (!query || !query.trim()) return { success: true, results: [], totalMatches: 0 };
   try {
+    const rgResults = await executeRipgrep(query, { isRegex, isCaseSensitive });
+    if (rgResults) {
+      const totalCount = rgResults.reduce((acc, r) => acc + r.matches.length, 0);
+      return { success: true, results: rgResults, totalMatches: totalCount, engine: 'ripgrep' };
+    }
+
     const files = await getAllWorkspaceFiles(activeWorkspacePath);
     const results = [];
     let regex = null;
@@ -462,8 +516,78 @@ ipcMain.handle('horizon:search-files', async (event, { query, isRegex = false, i
 });
 
 // ============================================================================
-// 3. INTEGRATED TERMINAL EXECUTION (POWERSHELL / CMD)
+// 3. INTEGRATED TERMINAL EXECUTION (POWERSHELL / CMD) - STREAMING PTY READY
 // ============================================================================
+let activeTerminalProcess = null;
+
+ipcMain.handle('horizon:run-command-stream', async (event, { command, cwd = null }) => {
+  const targetCwd = cwd || activeWorkspacePath;
+
+  if (activeTerminalProcess && activeTerminalProcess.pid) {
+    try {
+      exec(`taskkill /pid ${activeTerminalProcess.pid} /T /F`);
+    } catch (e) {}
+    activeTerminalProcess = null;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const child = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-Command', command], {
+        cwd: targetCwd,
+        env: process.env,
+        shell: false
+      });
+
+      activeTerminalProcess = child;
+
+      child.stdout.on('data', (data) => {
+        if (event.sender && !event.sender.isDestroyed()) {
+          event.sender.send('terminal:stream-data', { type: 'stdout', text: data.toString() });
+        }
+      });
+
+      child.stderr.on('data', (data) => {
+        if (event.sender && !event.sender.isDestroyed()) {
+          event.sender.send('terminal:stream-data', { type: 'stderr', text: data.toString() });
+        }
+      });
+
+      child.on('error', (err) => {
+        if (event.sender && !event.sender.isDestroyed()) {
+          event.sender.send('terminal:stream-data', { type: 'stderr', text: err.message });
+        }
+        activeTerminalProcess = null;
+        resolve({ success: false, error: err.message });
+      });
+
+      child.on('close', (code) => {
+        if (event.sender && !event.sender.isDestroyed()) {
+          event.sender.send('terminal:stream-exit', { code });
+        }
+        activeTerminalProcess = null;
+        resolve({ success: code === 0, code });
+      });
+
+    } catch (err) {
+      activeTerminalProcess = null;
+      resolve({ success: false, error: err.message });
+    }
+  });
+});
+
+ipcMain.handle('horizon:stop-command', async () => {
+  if (activeTerminalProcess && activeTerminalProcess.pid) {
+    try {
+      exec(`taskkill /pid ${activeTerminalProcess.pid} /T /F`);
+      activeTerminalProcess = null;
+      return { success: true, message: 'Đã dừng tiến trình' };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  return { success: false, message: 'Không có tiến trình nào đang chạy' };
+});
+
 ipcMain.handle('horizon:run-command', async (event, { command, cwd = null }) => {
   const targetCwd = cwd || activeWorkspacePath;
   return new Promise((resolve) => {
@@ -707,3 +831,219 @@ ipcMain.handle('horizon:git-diff', async (event, { repoPath, filePath }) => {
 ipcMain.handle('horizon:get-api-key', () => {
   return getApiKey();
 });
+
+// ============================================================================
+// 6. AUTONOMOUS AI AGENT EXECUTION ENGINE & CHECKPOINT ROLLBACK
+// ============================================================================
+const agentActionHistory = [];
+
+async function createBackup(filePath) {
+  try {
+    const backupDir = path.join(activeWorkspacePath, '.horizon', 'backups');
+    if (!fs.existsSync(backupDir)) {
+      await fsPromises.mkdir(backupDir, { recursive: true });
+    }
+    const full = path.isAbsolute(filePath) ? filePath : path.resolve(activeWorkspacePath, filePath);
+    if (fs.existsSync(full)) {
+      const timestamp = Date.now();
+      const safeName = path.relative(activeWorkspacePath, full).replace(/[\\/:]/g, '_');
+      const backupPath = path.join(backupDir, `${timestamp}_${safeName}.bak`);
+      await fsPromises.copyFile(full, backupPath);
+      const record = { backupPath, originalPath: full, timestamp };
+      agentActionHistory.push(record);
+      if (agentActionHistory.length > 50) agentActionHistory.shift();
+      return record;
+    }
+  } catch (e) {
+    console.error('Backup error:', e);
+  }
+  return null;
+}
+
+ipcMain.handle('horizon:replace-file-content', async (event, { filePath, targetContent, replacementContent }) => {
+  try {
+    const full = path.isAbsolute(filePath) ? filePath : path.resolve(activeWorkspacePath, filePath);
+    if (!fs.existsSync(full)) return { success: false, error: `Tệp không tồn tại: ${filePath}` };
+
+    const fileContent = await fsPromises.readFile(full, 'utf-8');
+    if (!fileContent.includes(targetContent)) {
+      return { success: false, error: 'Không tìm thấy đoạn mã mục tiêu (targetContent) trong tệp.' };
+    }
+
+    // Tạo bản backup snapshot trước khi chỉnh sửa
+    const backup = await createBackup(full);
+
+    // Thay thế đoạn mã
+    const newContent = fileContent.replace(targetContent, replacementContent);
+    await fsPromises.writeFile(full, newContent, 'utf-8');
+
+    return {
+      success: true,
+      path: full,
+      backupPath: backup ? backup.backupPath : null
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('horizon:undo-last-agent-action', async () => {
+  if (agentActionHistory.length === 0) {
+    return { success: false, message: 'Không có hành động nào gần đây để hoàn tác.' };
+  }
+  const last = agentActionHistory.pop();
+  try {
+    if (fs.existsSync(last.backupPath)) {
+      await fsPromises.copyFile(last.backupPath, last.originalPath);
+      await fsPromises.unlink(last.backupPath);
+      return {
+        success: true,
+        restoredFile: last.originalPath,
+        message: `Đã hoàn tác và khôi phục an toàn tệp: ${path.basename(last.originalPath)}`
+      };
+    }
+    return { success: false, message: 'Bản sao lưu không còn tồn tại.' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('horizon:agent-execute-tool', async (event, { toolName, args }) => {
+  try {
+    switch (toolName) {
+      case 'read_file': {
+        const full = path.isAbsolute(args.filePath) ? args.filePath : path.resolve(activeWorkspacePath, args.filePath);
+        if (!fs.existsSync(full)) return { success: false, error: `Không tìm thấy tệp: ${args.filePath}` };
+        const content = await fsPromises.readFile(full, 'utf-8');
+        const lines = content.split(/\r?\n/);
+        const start = args.startLine ? Math.max(1, parseInt(args.startLine)) - 1 : 0;
+        const end = args.endLine ? Math.min(lines.length, parseInt(args.endLine)) : lines.length;
+        const sliced = lines.slice(start, end).join('\n');
+        return { success: true, content: sliced, totalLines: lines.length };
+      }
+
+      case 'write_to_file': {
+        const full = path.isAbsolute(args.filePath) ? args.filePath : path.resolve(activeWorkspacePath, args.filePath);
+        const dir = path.dirname(full);
+        if (!fs.existsSync(dir)) await fsPromises.mkdir(dir, { recursive: true });
+        await createBackup(full);
+        await fsPromises.writeFile(full, args.content, 'utf-8');
+        return { success: true, filePath: full, message: `Đã ghi thành công tệp ${path.basename(full)}` };
+      }
+
+      case 'replace_file_content': {
+        const full = path.isAbsolute(args.filePath) ? args.filePath : path.resolve(activeWorkspacePath, args.filePath);
+        if (!fs.existsSync(full)) return { success: false, error: `Tệp không tồn tại: ${args.filePath}` };
+        const original = await fsPromises.readFile(full, 'utf-8');
+        if (!original.includes(args.targetContent)) {
+          return { success: false, error: 'Không tìm thấy targetContent trong tệp.' };
+        }
+        await createBackup(full);
+        const updated = original.replace(args.targetContent, args.replacementContent);
+        await fsPromises.writeFile(full, updated, 'utf-8');
+        return { success: true, filePath: full, message: `Đã thay thế nội dung trong ${path.basename(full)}` };
+      }
+
+      case 'list_dir': {
+        const targetDir = args.dirPath
+          ? (path.isAbsolute(args.dirPath) ? args.dirPath : path.resolve(activeWorkspacePath, args.dirPath))
+          : activeWorkspacePath;
+        if (!fs.existsSync(targetDir)) return { success: false, error: `Thư mục không tồn tại: ${args.dirPath}` };
+        const entries = await fsPromises.readdir(targetDir, { withFileTypes: true });
+        const items = entries
+          .filter(e => !['.git', 'node_modules', 'dist', '.gemini'].includes(e.name))
+          .map(e => ({
+            name: e.name,
+            isDirectory: e.isDirectory(),
+            path: path.join(targetDir, e.name)
+          }));
+        return { success: true, dir: targetDir, items };
+      }
+
+      case 'grep_search': {
+        const query = args.query;
+        const isCaseSensitive = !!args.isCaseSensitive;
+
+        // Ưu tiên Ripgrep siêu tốc
+        const rgResults = await executeRipgrep(query, { isCaseSensitive, isRegex: false, maxMatches: 50 });
+        if (rgResults) {
+          const flatMatches = [];
+          for (const item of rgResults) {
+            for (const m of item.matches) {
+              flatMatches.push({
+                file: item.relativePath,
+                lineNumber: m.lineNumber,
+                lineContent: m.lineContent
+              });
+              if (flatMatches.length >= 50) break;
+            }
+            if (flatMatches.length >= 50) break;
+          }
+          return { success: true, query, totalMatches: flatMatches.length, matches: flatMatches, engine: 'ripgrep' };
+        }
+
+        const allFiles = await getAllWorkspaceFiles(activeWorkspacePath);
+        const matches = [];
+
+        for (const file of allFiles) {
+          if (matches.length >= 50) break;
+          const ext = path.extname(file).toLowerCase();
+          if (imageExts.has(ext) || audioExts.has(ext) || videoExts.has(ext) || binaryExts.has(ext)) continue;
+
+          try {
+            const stat = await fsPromises.stat(file);
+            if (stat.size > 2 * 1024 * 1024) continue;
+            const content = await fsPromises.readFile(file, 'utf-8');
+            const lines = content.split(/\r?\n/);
+
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              const match = isCaseSensitive ? line.includes(query) : line.toLowerCase().includes(query.toLowerCase());
+              if (match) {
+                matches.push({
+                  file: path.relative(activeWorkspacePath, file),
+                  lineNumber: i + 1,
+                  lineContent: line.trim()
+                });
+                if (matches.length >= 50) break;
+              }
+            }
+          } catch (e) {}
+        }
+        return { success: true, query, totalMatches: matches.length, matches };
+      }
+
+      case 'run_command': {
+        const cwd = args.cwd ? (path.isAbsolute(args.cwd) ? args.cwd : path.resolve(activeWorkspacePath, args.cwd)) : activeWorkspacePath;
+        return new Promise((resolve) => {
+          exec(args.command, { cwd, shell: 'powershell.exe', maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+            resolve({
+              success: !err,
+              stdout: stdout || '',
+              stderr: stderr || (err ? err.message : ''),
+              exitCode: err ? (err.code || 1) : 0
+            });
+          });
+        });
+      }
+
+      default:
+        return { success: false, error: `Công cụ không xác định: ${toolName}` };
+    }
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Ollama Local Detection
+ipcMain.handle('horizon:check-ollama', async () => {
+  try {
+    const res = await fetch('http://localhost:11434/api/tags', { method: 'GET', signal: AbortSignal.timeout(1500) });
+    if (res.ok) {
+      const data = await res.json();
+      return { online: true, models: data.models || [] };
+    }
+  } catch (e) {}
+  return { online: false, models: [] };
+});
+

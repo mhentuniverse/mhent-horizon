@@ -173,10 +173,12 @@
     </div>
 
     <div class="titlebar-center">
-      <div class="workspace-pill" id="btn-change-workspace" title="Nhấp để đổi thư mục dự án (Ctrl+O)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        <span id="active-workspace-name">MHEnt. Universe</span>
-        <kbd>Ctrl+O</kbd>
+      <div class="dynamic-window-title" id="dynamic-window-title" title="Nhấp để đổi thư mục dự án (Ctrl+O)">
+        <span class="win-title-crumb file-name" id="win-title-file">Chưa mở tệp</span>
+        <span class="win-title-sep">—</span>
+        <span class="win-title-crumb ws-name" id="win-title-workspace">MHEnt. Universe</span>
+        <span class="win-title-sep">—</span>
+        <span class="win-title-crumb app-name">MHEnt. AISA Horizon</span>
       </div>
 
       <div class="quick-open-pill" id="btn-trigger-quick-open" title="Tìm nhanh tệp trong dự án (Ctrl+P)">
@@ -204,11 +206,29 @@
         <span>🌸 Mascot</span>
       </button>
 
-      <!-- Toggle Copilot Panel -->
-      <button type="button" class="action-pill-btn active" id="btn-toggle-copilot" title="Bật/Tắt AI Agent Sidecar (Ctrl+Shift+I)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-        <span>Agent</span>
-      </button>
+      <!-- Layout Panel Toggles (Antigravity & VS Code Style) -->
+      <div class="layout-toggles-group" id="layout-toggles-group">
+        <button type="button" class="layout-toggle-btn active" id="btn-toggle-primary-sidebar" title="Bật/Tắt Cây thư mục trái (Ctrl+B)">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm4 1H2v8h4V4zm1 8h7V4H7v8z"/>
+          </svg>
+        </button>
+        <button type="button" class="layout-toggle-btn active" id="btn-toggle-bottom-panel" title="Bật/Tắt Terminal Panel dưới (Ctrl+`)">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm0 1v5h12V4H2zm12 6H2v2h12v-2z"/>
+          </svg>
+        </button>
+        <button type="button" class="layout-toggle-btn active" id="btn-toggle-secondary-sidebar" title="Bật/Tắt AI Agent Sidecar phải (Ctrl+Shift+I)">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm8 1H2v8h8V4zm1 8h3V4h-3v8z"/>
+          </svg>
+        </button>
+        <button type="button" class="layout-toggle-btn" id="btn-top-settings" title="Cài đặt & Model Hub">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
 
       <!-- Window Controls -->
       <div class="window-controls">
@@ -374,8 +394,11 @@
 
     </aside>
 
+    <!-- Resizer: Left Sidebar -->
+    <div class="horizon-resizer resizer-x" id="resizer-left" title="Kéo để chỉnh kích thước Sidebar"></div>
+
     <!-- Center Area: Tabs -> Breadcrumbs -> Monaco Editor & Media Viewer -> Terminal -->
-    <main class="horizon-center-area">
+    <main class="horizon-center-area" id="horizon-center-area">
       
       <!-- 1. Tabs Bar on TOP -->
       <div class="editor-tabs-bar" id="editor-tabs-bar">
@@ -434,29 +457,109 @@
           </div>
         </div>
 
-        <!-- Empty State -->
+        <!-- Welcome Screen & Getting Started Dashboard (v2.1) -->
         <div class="editor-empty-state" id="editor-empty-state">
-          <img src="assets/horizon-logo.png" alt="AISA Horizon Logo" class="editor-empty-logo">
-          <h2>AISA Horizon Studio</h2>
-          <p>Mở một tệp từ cây thư mục bên trái hoặc bấm phím tắt để bắt đầu lập trình cùng Harmony 🌸 & Echo 😈</p>
-          <div class="empty-state-shortcuts">
-            <div class="shortcut-pill"><kbd>Ctrl + P</kbd><span>Tìm nhanh tệp</span></div>
-            <div class="shortcut-pill"><kbd>Ctrl + K</kbd><span>Tạo code bằng AI</span></div>
-            <div class="shortcut-pill"><kbd>Ctrl + `</kbd><span>Bật Terminal</span></div>
-            <div class="shortcut-pill"><kbd>F5</kbd><span>Chạy tệp hiện tại</span></div>
+          <div class="welcome-hero-stage">
+            <div class="welcome-logo-halo">
+              <img src="assets/horizon-logo.png" alt="AISA Horizon Logo" class="welcome-logo-img">
+            </div>
+            <h1 class="welcome-title">AISA HORIZON STUDIO</h1>
+            <p class="welcome-subtitle">Hệ điều hành IDE AI-First của Vũ trụ MHEnt Universe</p>
+            <div class="welcome-badges-strip">
+              <span class="welcome-badge author">👑 Yorutsuki Yurika</span>
+              <span class="welcome-badge fast">⚡ Ripgrep 15.0 Active</span>
+              <span class="welcome-badge ai">🤖 ReAct Agent Ready</span>
+              <span class="welcome-badge mascot">🌸 Harmony & Echo Online</span>
+            </div>
+          </div>
+
+          <!-- Interactive Getting Started Cards Grid -->
+          <div class="welcome-grid">
+            <div class="welcome-card" id="card-welcome-new-file" title="Tạo tệp mới (Ctrl+N)">
+              <div class="welcome-card-icon">📄</div>
+              <div class="welcome-card-info">
+                <span class="welcome-card-title">Tạo Tệp Mới</span>
+                <span class="welcome-card-desc">Bắt đầu viết mã nguồn mới</span>
+              </div>
+              <kbd>Ctrl+N</kbd>
+            </div>
+
+            <div class="welcome-card" id="card-welcome-open-folder" title="Mở thư mục dự án (Ctrl+O)">
+              <div class="welcome-card-icon">📁</div>
+              <div class="welcome-card-info">
+                <span class="welcome-card-title">Mở Thư Mục</span>
+                <span class="welcome-card-desc">Nạp toàn bộ dự án vào IDE</span>
+              </div>
+              <kbd>Ctrl+O</kbd>
+            </div>
+
+            <div class="welcome-card" id="card-welcome-quick-open" title="Tìm nhanh tệp (Ctrl+P)">
+              <div class="welcome-card-icon">🔍</div>
+              <div class="welcome-card-info">
+                <span class="welcome-card-title">Tìm Nhanh Tệp</span>
+                <span class="welcome-card-desc">Chuyển tệp tức thì qua Quick Open</span>
+              </div>
+              <kbd>Ctrl+P</kbd>
+            </div>
+
+            <div class="welcome-card" id="card-welcome-agent" title="Mở AI Agent Sidecar (Ctrl+Shift+I)">
+              <div class="welcome-card-icon">🤖</div>
+              <div class="welcome-card-info">
+                <span class="welcome-card-title">AISA AI Agent</span>
+                <span class="welcome-card-desc">Lập trình tự hành cùng Agent</span>
+              </div>
+              <kbd>Ctrl+Shift+I</kbd>
+            </div>
+
+            <div class="welcome-card" id="card-welcome-terminal" title="Bật PowerShell Streaming Console (Ctrl+`)">
+              <div class="welcome-card-icon">⚡</div>
+              <div class="welcome-card-info">
+                <span class="welcome-card-title">Streaming Terminal</span>
+                <span class="welcome-card-desc">Chạy server, npm test, git</span>
+              </div>
+              <kbd>Ctrl+`</kbd>
+            </div>
+
+            <div class="welcome-card" id="card-welcome-inline-ai" title="Sinh mã tại chỗ bằng AI (Ctrl+K)">
+              <div class="welcome-card-icon">✨</div>
+              <div class="welcome-card-info">
+                <span class="welcome-card-title">Inline AI Generator</span>
+                <span class="welcome-card-desc">Sinh mã nội dòng trực tiếp</span>
+              </div>
+              <kbd>Ctrl+K</kbd>
+            </div>
+          </div>
+
+          <!-- Mascot Sanctuary Dialogue Card -->
+          <div class="welcome-mascot-card">
+            <div class="welcome-mascot-avatars">
+              <span class="chibi harmony" title="Harmony 🌸">🌸</span>
+              <span class="chibi echo" title="Echo 😈">😈</span>
+            </div>
+            <div class="welcome-mascot-text">
+              <b style="color: #38bdf8;">Harmony 🌸 & Echo 😈:</b>
+              <span>"Chào mừng Yorutsuki Yurika! Tụi em đã sẵn sàng đồng hành cùng cậu lập trình dự án hôm nay. Cần gỡ bug, refactor hay tạo tính năng mới cứ gọi tụi em nhé!"</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Integrated Terminal Panel -->
+      <!-- Resizer: Bottom Terminal -->
+      <div class="horizon-resizer resizer-y" id="resizer-bottom" title="Kéo để chỉnh độ cao Terminal"></div>
+
+      <!-- Integrated Terminal Panel (Streaming & Interactive) -->
       <div class="terminal-panel" id="terminal-panel">
         <div class="terminal-header">
           <div class="terminal-tabs">
-            <span class="terminal-tab-btn active">⚡ POWERSHELL CONSOLE</span>
+            <span class="terminal-tab-btn active">⚡ POWERSHELL STREAMING PTY</span>
             <span id="terminal-cwd-label" style="color: var(--text-dim); font-size: 10.5px;"></span>
+            <span class="terminal-status-badge running" id="terminal-running-badge" style="display: none;">● RUNNING</span>
           </div>
           <div class="terminal-actions">
-            <button type="button" class="sidebar-action-btn" id="btn-clear-terminal" title="Xóa màn hình Terminal">
+            <button type="button" class="sidebar-action-btn terminal-btn-stop" id="btn-stop-terminal" style="display: none;" title="Dừng tiến trình đang chạy (Ctrl+C)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#ef4444"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            </button>
+            <button type="button" class="sidebar-action-btn" id="btn-clear-terminal" title="Xóa màn hình Terminal (cls)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
             <button type="button" class="sidebar-action-btn" id="btn-close-terminal" title="Đóng Terminal">
@@ -465,14 +568,17 @@
           </div>
         </div>
         <div class="terminal-body" id="terminal-output-container">
-          <div style="color: #64748b;">[AISA Horizon Native PowerShell Shell v2.0 Ready]</div>
+          <div style="color: #64748b;">[AISA Horizon Native Streaming PowerShell Shell v2.1 Ready]</div>
         </div>
         <div class="terminal-input-bar">
           <span class="terminal-prompt-symbol">&gt;</span>
-          <input type="text" class="terminal-input" id="terminal-input" placeholder="Gõ lệnh PowerShell / CMD rồi bấm Enter (ví dụ: git status, npm run dev, dir)...">
+          <input type="text" class="terminal-input" id="terminal-input" placeholder="Gõ lệnh PowerShell / CMD (Mũi tên Lên/Xuống để duyệt lịch sử)...">
         </div>
       </div>
     </main>
+
+    <!-- Resizer: Right Copilot Panel -->
+    <div class="horizon-resizer resizer-x" id="resizer-right" title="Kéo để chỉnh kích thước AISA AI Studio"></div>
 
     <!-- Right Sidecar: Google Antigravity-style AI Agent & Copilot -->
     <aside class="horizon-copilot-panel" id="horizon-copilot-panel">
@@ -498,6 +604,34 @@
         </button>
       </div>
 
+      <!-- Agent Model Selector Bar & 1-Click Rollback -->
+      <div class="agent-model-bar" id="agent-model-bar">
+        <div class="model-select-wrapper">
+          <span class="model-icon" id="agent-model-icon">🌟</span>
+          <select class="agent-model-select" id="select-agent-model" title="Chọn Mô hình AI (Không cần key với Ollama)">
+            <option value="gemini-2.0-flash" selected>🌟 Gemini 2.0 Flash</option>
+            <option value="gemini-2.0-pro">🧠 Gemini 2.0 Pro Exp</option>
+            <option value="ollama-local">🦙 Ollama Local (0đ / No Key)</option>
+            <option value="mhent-proxy">🌐 MHEnt Cloud Account</option>
+            <option value="custom-key">🔑 Tự nhập API Key...</option>
+          </select>
+        </div>
+        <button type="button" class="undo-agent-btn" id="btn-undo-agent-action" title="Hoàn tác chỉnh sửa gần nhất của Agent">
+          ↶ Hoàn tác (Undo)
+        </button>
+      </div>
+
+      <!-- Agent Safety Approval Gate Strip -->
+      <div class="agent-safety-strip" id="agent-safety-strip">
+        <div class="safety-strip-info">
+          <span class="safety-icon" id="safety-mode-icon">🛡️</span>
+          <span class="safety-text" id="safety-mode-text">Lệnh: <b>Hỏi trước khi chạy</b></span>
+        </div>
+        <button type="button" class="safety-mode-btn" id="btn-toggle-safety-mode" title="Nhấp để đổi giữa [Hỏi trước khi chạy] và [Tự động cho phép]">
+          <span>Đổi chế độ</span>
+        </button>
+      </div>
+
       <!-- Quick AI Actions -->
       <div class="copilot-quick-actions">
         <button type="button" class="copilot-action-btn" id="btn-ai-explain">
@@ -518,7 +652,7 @@
       <div class="copilot-messages-container" id="copilot-messages">
         <div class="copilot-msg-bubble harmony">
           <div class="copilot-speaker-tag harmony">🌸 Harmony</div>
-          <div>Chào Sakura yêu quý! Em và Echo đã sẵn sàng đồng hành cùng cậu kiến tạo vũ trụ hôm nay! Cậu cần viết tính năng mới, gỡ bug, xem diff hay refactor cứ giao cho tụi em nhé! ✨</div>
+          <div>Chào Yurika yêu quý! Em và Echo đã sẵn sàng đồng hành cùng cậu kiến tạo vũ trụ hôm nay! Cậu cần viết tính năng mới, gỡ bug, xem diff hay refactor cứ giao cho tụi em nhé! ✨</div>
         </div>
       </div>
 
@@ -565,7 +699,7 @@
         </div>
       </div>
       <div class="mascot-dialogue-balloon" id="mascot-dialogue-balloon">
-        <span>Sẵn sàng code cùng Sakura hôm nay! ✨🌸</span>
+        <span>Sẵn sàng code cùng Yurika hôm nay! ✨🌸</span>
       </div>
     </div>
   </aside>
@@ -635,6 +769,9 @@
       <div class="statusbar-item" style="color: #38bdf8;" id="sb-ai-status">● Gemini 2.0 Flash Online</div>
     </div>
   </footer>
+
+  <!-- Horizon Toast Notification Container (Bottom-Right) -->
+  <div class="horizon-toast-container" id="horizon-toast-container"></div>
 
   <!-- Horizon Master Controller Logic -->
   <script src="js/horizon-app.js"></script>

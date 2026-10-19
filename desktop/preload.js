@@ -47,9 +47,20 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   gitPull: (repoPath = null) => ipcRenderer.invoke('horizon:git-pull', repoPath),
   gitDiff: (repoPath, filePath) => ipcRenderer.invoke('horizon:git-diff', { repoPath, filePath }),
 
-  // Integrated Terminal Runner (PowerShell / CMD)
+  // Integrated Terminal Runner (PowerShell / CMD) - Streaming & Interactive
   runCommand: (command, cwd = null) => ipcRenderer.invoke('horizon:run-command', { command, cwd }),
+  runCommandStream: (command, cwd = null) => ipcRenderer.invoke('horizon:run-command-stream', { command, cwd }),
+  stopCommand: () => ipcRenderer.invoke('horizon:stop-command'),
+  onTerminalStreamData: (callback) => ipcRenderer.on('terminal:stream-data', (event, val) => callback(val)),
+  onTerminalStreamExit: (callback) => ipcRenderer.on('terminal:stream-exit', (event, val) => callback(val)),
 
   // Gemini API Key for Copilot & Agent
-  getApiKey: () => ipcRenderer.invoke('horizon:get-api-key')
+  getApiKey: () => ipcRenderer.invoke('horizon:get-api-key'),
+
+  // Autonomous Agent Tool Execution & Safety
+  replaceFileContent: (filePath, targetContent, replacementContent) => ipcRenderer.invoke('horizon:replace-file-content', { filePath, targetContent, replacementContent }),
+  agentExecuteTool: (toolName, args) => ipcRenderer.invoke('horizon:agent-execute-tool', { toolName, args }),
+  undoLastAgentAction: () => ipcRenderer.invoke('horizon:undo-last-agent-action'),
+  checkOllama: () => ipcRenderer.invoke('horizon:check-ollama')
 });
+
