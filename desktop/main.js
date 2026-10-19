@@ -12,8 +12,41 @@ const { exec, spawn } = require('child_process');
 
 let mainWindow = null;
 
-// Default workspace is the MHEnt Universe root folder
-let activeWorkspacePath = path.resolve(__dirname, '..', '..');
+function getInitialWorkspace() {
+  try {
+    const stateFile = path.join(app.getPath('userData'), 'horizon-state.json');
+    if (fs.existsSync(stateFile)) {
+      const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+      if (state.lastWorkspace && fs.existsSync(state.lastWorkspace)) {
+        return state.lastWorkspace;
+      }
+    }
+  } catch (e) {}
+
+  const mhentUniverse = 'c:\\Users\\Yorutsuki Yurika\\Documents\\Miyazaki Haruto Entertainment Co., Ltd. - Project MHEnt. Universe';
+  if (fs.existsSync(mhentUniverse)) {
+    return mhentUniverse;
+  }
+
+  if (!app.isPackaged) {
+    const parent = path.resolve(__dirname, '..', '..');
+    if (fs.existsSync(parent)) return parent;
+  }
+
+  return app.getPath('documents');
+}
+
+function saveWorkspaceState(wsPath) {
+  try {
+    const stateDir = app.getPath('userData');
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+    const stateFile = path.join(stateDir, 'horizon-state.json');
+    fs.writeFileSync(stateFile, JSON.stringify({ lastWorkspace: wsPath, updatedAt: new Date().toISOString() }, null, 2));
+  } catch (e) {}
+}
+
+// Default workspace with persistence
+let activeWorkspacePath = getInitialWorkspace();
 
 // File extension categories
 const imageExts = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']);
@@ -23,6 +56,13 @@ const binaryExts = new Set(['.exe', '.dll', '.zip', '.rar', '.7z', '.tar', '.gz'
 
 function getApiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+  try {
+    const p0 = path.join(app.getPath('userData'), 'keys.json');
+    if (fs.existsSync(p0)) {
+      const d = JSON.parse(fs.readFileSync(p0, 'utf-8'));
+      if (d.GEMINI_API_KEY) return d.GEMINI_API_KEY;
+    }
+  } catch (e) {}
   try {
     const p1 = path.join(__dirname, '..', 'data', 'keys.json');
     if (fs.existsSync(p1)) {
@@ -117,6 +157,7 @@ ipcMain.handle('horizon:open-workspace-dialog', async () => {
   });
   if (!res.canceled && res.filePaths && res.filePaths.length > 0) {
     activeWorkspacePath = path.resolve(res.filePaths[0]);
+    saveWorkspaceState(activeWorkspacePath);
     return activeWorkspacePath;
   }
   return null;
@@ -125,9 +166,22 @@ ipcMain.handle('horizon:open-workspace-dialog', async () => {
 ipcMain.handle('horizon:set-workspace-path', (event, newPath) => {
   if (fs.existsSync(newPath)) {
     activeWorkspacePath = path.resolve(newPath);
+    saveWorkspaceState(activeWorkspacePath);
     return { success: true, path: activeWorkspacePath };
   }
   return { success: false, error: 'Thư mục không tồn tại' };
+});
+
+ipcMain.handle('horizon:save-api-key', (event, newKey) => {
+  try {
+    const userDir = app.getPath('userData');
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+    fs.writeFileSync(path.join(userDir, 'keys.json'), JSON.stringify({ GEMINI_API_KEY: (newKey || '').trim() }, null, 2));
+    process.env.GEMINI_API_KEY = (newKey || '').trim();
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });
 
 ipcMain.handle('horizon:read-dir', async (event, dirPath = null) => {

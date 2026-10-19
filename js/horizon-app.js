@@ -69,25 +69,28 @@ window.AisaHorizonApp = {
     // 7. Setup Git Source Control (Multi-Repo Support)
     await this.setupGitPanel();
 
-    // 8. Setup Terminal Runner
-    this.setupTerminal();
+    // 8. Setup Multi-Tab Bottom Panel (Problems, Output, Debug, Terminal, Ports)
+    this.setupBottomPanel();
 
-    // 9. Setup Antigravity Sidecar Agent & Modes
+    // 9. Setup Settings & Preferences Modal (Ctrl+,)
+    this.setupSettingsModal();
+
+    // 10. Setup Antigravity Sidecar Agent & Modes
     this.setupAgentSidecar();
 
-    // 10. Setup Inline AI Code Generator (Ctrl+K)
+    // 11. Setup Inline AI Code Generator (Ctrl+K)
     this.setupInlineAI();
 
-    // 11. Setup Quick Open Modal (Ctrl+P)
+    // 12. Setup Quick Open Modal (Ctrl+P)
     this.setupQuickOpen();
 
-    // 12. Setup File Context Menu
+    // 13. Setup File Context Menu
     this.setupContextMenu();
 
-    // 13. Setup Floating Companion Mascot
+    // 14. Setup Floating Companion Mascot
     this.setupMascotWidget();
 
-    // 14. Setup Global Keyboard Shortcuts
+    // 15. Setup Global Keyboard Shortcuts
     this.setupKeybindings();
 
     this.mascotSay('🌸 Harmony: Chào mừng Yurika trở lại AISA Horizon Studio! Tụi em đã nâng cấp đầy đủ toàn bộ tính năng rồi nè! ✨');
@@ -107,17 +110,7 @@ window.AisaHorizonApp = {
 
     const btnChangeWs = document.getElementById('btn-change-workspace');
     if (btnChangeWs) {
-      btnChangeWs.addEventListener('click', async () => {
-        const newPath = await window.AisaHorizon?.openWorkspaceDialog();
-        if (newPath) {
-          this.activeWorkspace = newPath;
-          this.expandedFolders.clear();
-          this.updateWorkspaceUI(newPath);
-          await this.refreshFileTree();
-          await this.loadGitRepos();
-          this.mascotSay(`Đã mở không gian làm việc: ${newPath.split(/[\\/]/).pop()} 📂`);
-        }
-      });
+      btnChangeWs.addEventListener('click', () => this.openWorkspaceFolder());
     }
 
     const btnTriggerQuickOpen = document.getElementById('btn-trigger-quick-open');
@@ -153,6 +146,28 @@ window.AisaHorizonApp = {
         copilotPanel.style.display = isHidden ? 'flex' : 'none';
         btnToggleCopilot.classList.toggle('active', isHidden);
       });
+    }
+  },
+
+  async openWorkspaceFolder() {
+    if (!window.AisaHorizon) return;
+    try {
+      const newPath = await window.AisaHorizon.openWorkspaceDialog();
+      if (newPath) {
+        this.activeWorkspace = newPath;
+        this.expandedFolders.clear();
+        this.updateWorkspaceUI(newPath);
+        await this.refreshFileTree();
+        await this.loadGitRepos();
+        this.mascotSay(`Đã mở không gian làm việc: ${newPath.split(/[\\/]/).pop()} 📂`);
+        this.showToast({
+          title: 'Không gian làm việc',
+          message: `Đã mở thư mục dự án: ${newPath}`,
+          type: 'success'
+        });
+      }
+    } catch (err) {
+      console.error('Lỗi khi mở thư mục dự án:', err);
     }
   },
 
@@ -197,8 +212,7 @@ window.AisaHorizonApp = {
 
     if (btnBottom && terminal) {
       btnBottom.addEventListener('click', () => {
-        togglePanel(terminal, btnBottom);
-        if (terminal.style.display !== 'none') document.getElementById('terminal-input')?.focus();
+        this.toggleBottomPanel();
       });
     }
 
@@ -208,13 +222,13 @@ window.AisaHorizonApp = {
 
     if (btnSettings) {
       btnSettings.addEventListener('click', () => {
-        document.getElementById('act-btn-settings')?.click();
+        this.openSettingsModal();
       });
     }
 
     const dynTitle = document.getElementById('dynamic-window-title');
     if (dynTitle) {
-      dynTitle.addEventListener('click', () => document.getElementById('btn-change-workspace')?.click());
+      dynTitle.addEventListener('click', () => this.openWorkspaceFolder());
     }
   },
 
@@ -439,10 +453,13 @@ window.AisaHorizonApp = {
 
   setupWelcomeScreen() {
     document.getElementById('card-welcome-new-file')?.addEventListener('click', () => this.createNewFilePrompt());
-    document.getElementById('card-welcome-open-folder')?.addEventListener('click', () => document.getElementById('btn-change-workspace')?.click());
+    document.getElementById('card-welcome-open-folder')?.addEventListener('click', () => this.openWorkspaceFolder());
     document.getElementById('card-welcome-quick-open')?.addEventListener('click', () => this.openQuickOpen());
     document.getElementById('card-welcome-agent')?.addEventListener('click', () => document.getElementById('btn-toggle-secondary-sidebar')?.click());
-    document.getElementById('card-welcome-terminal')?.addEventListener('click', () => document.getElementById('btn-toggle-bottom-panel')?.click());
+    document.getElementById('card-welcome-terminal')?.addEventListener('click', () => {
+      this.switchBottomTab('terminal');
+      this.toggleBottomPanel(true);
+    });
     document.getElementById('card-welcome-inline-ai')?.addEventListener('click', () => this.openInlineAI());
   },
 
@@ -516,59 +533,164 @@ window.AisaHorizonApp = {
       { id: 'menu-copilot', dropdown: 'dropdown-agent' }
     ];
 
+    let isAnyMenuOpen = false;
+
     const closeAllDropdowns = () => {
       menus.forEach(m => {
         const el = document.getElementById(m.dropdown);
+        const trigger = document.getElementById(m.id);
         if (el) el.style.display = 'none';
+        if (trigger) trigger.classList.remove('active');
       });
+      isAnyMenuOpen = false;
+    };
+
+    const openDropdown = (targetDropdownId, targetTriggerId) => {
+      menus.forEach(m => {
+        const el = document.getElementById(m.dropdown);
+        const trigger = document.getElementById(m.id);
+        if (el) el.style.display = (m.dropdown === targetDropdownId) ? 'flex' : 'none';
+        if (trigger) trigger.classList.toggle('active', m.id === targetTriggerId);
+      });
+      isAnyMenuOpen = true;
     };
 
     menus.forEach(m => {
       const trigger = document.getElementById(m.id);
-      const dropdown = document.getElementById(m.dropdown);
-      if (trigger && dropdown) {
+      if (trigger) {
         trigger.addEventListener('click', (e) => {
           e.stopPropagation();
-          const isShown = dropdown.style.display === 'flex';
-          closeAllDropdowns();
-          dropdown.style.display = isShown ? 'none' : 'flex';
+          const dropdown = document.getElementById(m.dropdown);
+          const isShown = dropdown && dropdown.style.display === 'flex';
+          if (isShown) {
+            closeAllDropdowns();
+          } else {
+            openDropdown(m.dropdown, m.id);
+          }
+        });
+
+        trigger.addEventListener('mouseenter', () => {
+          if (isAnyMenuOpen) {
+            openDropdown(m.dropdown, m.id);
+          }
         });
       }
     });
 
     window.addEventListener('click', () => closeAllDropdowns());
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isAnyMenuOpen) {
+        closeAllDropdowns();
+      }
+    });
 
     // 1. Tệp Actions
-    document.getElementById('menu-action-new-file')?.addEventListener('click', () => this.createNewFilePrompt());
-    document.getElementById('menu-action-open-folder')?.addEventListener('click', () => document.getElementById('btn-change-workspace')?.click());
-    document.getElementById('menu-action-save')?.addEventListener('click', () => this.saveActiveFile());
-    document.getElementById('menu-action-save-all')?.addEventListener('click', () => this.saveAllFiles());
+    document.getElementById('menu-action-new-file')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.createNewFilePrompt();
+    });
+    document.getElementById('menu-action-open-folder')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.openWorkspaceFolder();
+    });
+    document.getElementById('menu-action-save')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.saveActiveFile();
+    });
+    document.getElementById('menu-action-save-all')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.saveAllFiles();
+    });
     document.getElementById('menu-action-close-tab')?.addEventListener('click', () => {
+      closeAllDropdowns();
       if (this.activeTabPath) this.closeTab(this.activeTabPath);
     });
-    document.getElementById('menu-action-exit')?.addEventListener('click', () => window.AisaHorizon?.closeWindow());
+    document.getElementById('menu-action-exit')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      window.AisaHorizon?.closeWindow();
+    });
 
     // 2. Chỉnh sửa Actions
-    document.getElementById('menu-action-undo')?.addEventListener('click', () => this.editor?.trigger('menu', 'undo'));
-    document.getElementById('menu-action-redo')?.addEventListener('click', () => this.editor?.trigger('menu', 'redo'));
-    document.getElementById('menu-action-cut')?.addEventListener('click', () => this.editor?.focus());
-    document.getElementById('menu-action-copy')?.addEventListener('click', () => this.editor?.focus());
-    document.getElementById('menu-action-paste')?.addEventListener('click', () => this.editor?.focus());
-    document.getElementById('menu-action-find')?.addEventListener('click', () => this.editor?.getAction('actions.find')?.run());
-    document.getElementById('menu-action-replace')?.addEventListener('click', () => this.editor?.getAction('editor.action.startFindReplaceAction')?.run());
-    document.getElementById('menu-action-format')?.addEventListener('click', () => this.editor?.getAction('editor.action.formatDocument')?.run());
+    document.getElementById('menu-action-undo')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.editor?.trigger('menu', 'undo');
+    });
+    document.getElementById('menu-action-redo')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.editor?.trigger('menu', 'redo');
+    });
+    document.getElementById('menu-action-cut')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      document.execCommand('cut');
+      this.editor?.focus();
+    });
+    document.getElementById('menu-action-copy')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      document.execCommand('copy');
+      this.editor?.focus();
+    });
+    document.getElementById('menu-action-paste')?.addEventListener('click', async () => {
+      closeAllDropdowns();
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && this.editor) {
+          this.editor.trigger('keyboard', 'type', { text });
+        }
+      } catch (e) {
+        this.editor?.focus();
+      }
+    });
+    document.getElementById('menu-action-find')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.editor?.getAction('actions.find')?.run();
+    });
+    document.getElementById('menu-action-replace')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.editor?.getAction('editor.action.startFindReplaceAction')?.run();
+    });
+    document.getElementById('menu-action-format')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.editor?.getAction('editor.action.formatDocument')?.run();
+    });
 
     // 3. Lựa chọn Actions
-    document.getElementById('menu-action-select-all')?.addEventListener('click', () => this.editor?.getAction('editor.action.selectAll')?.run());
-    document.getElementById('menu-action-expand-selection')?.addEventListener('click', () => this.editor?.getAction('editor.action.smartSelect.expand')?.run());
+    document.getElementById('menu-action-select-all')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.editor?.getAction('editor.action.selectAll')?.run();
+    });
+    document.getElementById('menu-action-expand-selection')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.editor?.getAction('editor.action.smartSelect.expand')?.run();
+    });
 
     // 4. Xem Actions
-    document.getElementById('menu-action-view-explorer')?.addEventListener('click', () => document.getElementById('act-btn-explorer')?.click());
-    document.getElementById('menu-action-view-search')?.addEventListener('click', () => document.getElementById('act-btn-search')?.click());
-    document.getElementById('menu-action-view-git')?.addEventListener('click', () => document.getElementById('act-btn-git')?.click());
-    document.getElementById('menu-action-view-terminal')?.addEventListener('click', () => document.getElementById('act-btn-terminal')?.click());
-    document.getElementById('menu-action-view-copilot')?.addEventListener('click', () => document.getElementById('act-btn-copilot')?.click());
+    document.getElementById('menu-action-view-explorer')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      document.getElementById('act-btn-explorer')?.click();
+    });
+    document.getElementById('menu-action-view-search')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      document.getElementById('act-btn-search')?.click();
+    });
+    document.getElementById('menu-action-view-git')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      document.getElementById('act-btn-git')?.click();
+    });
+    document.getElementById('menu-action-view-terminal')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.switchBottomTab('terminal');
+      this.toggleBottomPanel(true);
+    });
+    document.getElementById('menu-action-view-copilot')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      const copilot = document.getElementById('horizon-copilot-panel');
+      if (copilot && copilot.style.display === 'none') {
+        document.getElementById('btn-toggle-secondary-sidebar')?.click();
+      }
+      document.getElementById('copilot-input')?.focus();
+    });
     document.getElementById('menu-action-toggle-wrap')?.addEventListener('click', () => {
+      closeAllDropdowns();
       if (this.editor) {
         const cur = this.editor.getOption(monaco.editor.EditorOption.wordWrap);
         this.editor.updateOptions({ wordWrap: cur === 'on' ? 'off' : 'on' });
@@ -576,16 +698,44 @@ window.AisaHorizonApp = {
     });
 
     // 5. Terminal Actions
-    document.getElementById('menu-action-term-toggle')?.addEventListener('click', () => document.getElementById('act-btn-terminal')?.click());
-    document.getElementById('menu-action-term-clear')?.addEventListener('click', () => this.clearTerminal());
-    document.getElementById('menu-action-term-run')?.addEventListener('click', () => this.runActiveFile());
+    document.getElementById('menu-action-term-toggle')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.toggleBottomPanel();
+    });
+    document.getElementById('menu-action-term-clear')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.clearTerminal();
+    });
+    document.getElementById('menu-action-term-run')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.runActiveFile();
+    });
 
     // 6. AI Agent Actions
-    document.getElementById('menu-action-agent-open')?.addEventListener('click', () => document.getElementById('act-btn-copilot')?.click());
-    document.getElementById('menu-action-agent-inline')?.addEventListener('click', () => this.openInlineAI());
-    document.getElementById('menu-action-agent-explain')?.addEventListener('click', () => this.triggerCodeAction('explain'));
-    document.getElementById('menu-action-agent-fix')?.addEventListener('click', () => this.triggerCodeAction('fix'));
-    document.getElementById('menu-action-agent-refactor')?.addEventListener('click', () => this.triggerCodeAction('refactor'));
+    document.getElementById('menu-action-agent-open')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      const copilot = document.getElementById('horizon-copilot-panel');
+      if (copilot && copilot.style.display === 'none') {
+        document.getElementById('btn-toggle-secondary-sidebar')?.click();
+      }
+      document.getElementById('copilot-input')?.focus();
+    });
+    document.getElementById('menu-action-agent-inline')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.openInlineAI();
+    });
+    document.getElementById('menu-action-agent-explain')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.triggerCodeAction('explain');
+    });
+    document.getElementById('menu-action-agent-fix')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.triggerCodeAction('fix');
+    });
+    document.getElementById('menu-action-agent-refactor')?.addEventListener('click', () => {
+      closeAllDropdowns();
+      this.triggerCodeAction('refactor');
+    });
   },
 
   updateWorkspaceUI(wsPath) {
@@ -653,17 +803,6 @@ window.AisaHorizonApp = {
       this.refreshGitStatus();
     });
 
-    const actBtnTerm = document.getElementById('act-btn-terminal');
-    const termPanel = document.getElementById('terminal-panel');
-    if (actBtnTerm && termPanel) {
-      actBtnTerm.addEventListener('click', () => {
-        const isHidden = termPanel.style.display === 'none';
-        termPanel.style.display = isHidden ? 'flex' : 'none';
-        actBtnTerm.classList.toggle('active', isHidden);
-        if (isHidden) document.getElementById('terminal-input')?.focus();
-      });
-    }
-
     const actBtnCopilot = document.getElementById('act-btn-copilot');
     const copilotPanel = document.getElementById('horizon-copilot-panel');
     if (actBtnCopilot && copilotPanel) {
@@ -677,12 +816,7 @@ window.AisaHorizonApp = {
     const actBtnSettings = document.getElementById('act-btn-settings');
     if (actBtnSettings) {
       actBtnSettings.addEventListener('click', () => {
-        const key = prompt('Cập nhật Google Gemini API Key cho AISA Horizon Studio:', this.geminiKey || '');
-        if (key !== null) {
-          this.geminiKey = key.trim();
-          localStorage.setItem('mhent_ai_api_key', this.geminiKey);
-          this.mascotSay('🌸 Harmony: Đã lưu API Key thành công! Studio đã sẵn sàng bung hết sức mạnh! ✨');
-        }
+        this.openSettingsModal();
       });
     }
   },
@@ -1714,12 +1848,303 @@ window.AisaHorizonApp = {
     container.scrollTop = container.scrollHeight;
   },
 
-  setupTerminal() {
+  activeBottomTab: 'terminal',
+  selectedShell: 'powershell',
+  selectedOutputChannel: 'agent',
+
+  setupBottomPanel() {
+    const termPanel = document.getElementById('terminal-panel');
+    const tabBtns = document.querySelectorAll('.bottom-tab-btn');
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetTab = btn.getAttribute('data-panel-tab');
+        if (targetTab) this.switchBottomTab(targetTab);
+      });
+    });
+
+    // Shell selector (powershell vs cmd)
+    const shellSelect = document.getElementById('select-terminal-shell');
+    if (shellSelect) {
+      shellSelect.addEventListener('change', (e) => {
+        this.selectedShell = e.target.value;
+        this.printTerminal(`[Switched terminal shell profile to: ${this.selectedShell}]`, '#38bdf8');
+      });
+    }
+
+    // Output Channel selector
+    const outChanSelect = document.getElementById('select-output-channel');
+    if (outChanSelect) {
+      outChanSelect.addEventListener('change', (e) => {
+        this.selectedOutputChannel = e.target.value;
+      });
+    }
+
+    // Clear output button
+    document.getElementById('btn-clear-output')?.addEventListener('click', () => {
+      const outBox = document.getElementById('output-log-container');
+      if (outBox) outBox.innerHTML = '<div class="output-line info">[System] Luồng Output đã được làm sạch.</div>';
+    });
+
+    // Refresh ports button
+    document.getElementById('btn-refresh-ports')?.addEventListener('click', () => {
+      this.refreshPorts();
+    });
+
+    // Maximize / Restore Bottom Panel
+    const btnMaxBottom = document.getElementById('btn-maximize-bottom-panel');
+    if (btnMaxBottom && termPanel) {
+      btnMaxBottom.addEventListener('click', () => {
+        termPanel.classList.toggle('maximized');
+        setTimeout(() => {
+          this.editor?.layout();
+          this.diffEditor?.layout();
+        }, 50);
+      });
+    }
+
+    // Close Bottom Panel
+    const btnCloseBottom = document.getElementById('btn-close-terminal');
+    if (btnCloseBottom && termPanel) {
+      btnCloseBottom.addEventListener('click', () => {
+        this.toggleBottomPanel(false);
+      });
+    }
+
+    // Setup Debug Console REPL
+    this.setupDebugConsole();
+
+    // Setup Streaming Terminal Controls
+    this.setupTerminalRunner();
+
+    // Default tab
+    this.switchBottomTab('terminal');
+  },
+
+  switchBottomTab(tabName) {
+    this.activeBottomTab = tabName;
+    const tabBtns = document.querySelectorAll('.bottom-tab-btn');
+    tabBtns.forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-panel-tab') === tabName);
+    });
+
+    const subviews = {
+      problems: document.getElementById('subview-problems'),
+      output: document.getElementById('subview-output'),
+      debug: document.getElementById('subview-debug'),
+      terminal: document.getElementById('subview-terminal'),
+      ports: document.getElementById('subview-ports')
+    };
+
+    Object.keys(subviews).forEach(k => {
+      const el = subviews[k];
+      if (el) el.style.display = (k === tabName) ? 'flex' : 'none';
+    });
+
+    // Toggle header action groups
+    const termControls = document.getElementById('terminal-controls-group');
+    const outControls = document.getElementById('output-controls-group');
+    const portsControls = document.getElementById('ports-controls-group');
+
+    if (termControls) termControls.style.display = (tabName === 'terminal') ? 'flex' : 'none';
+    if (outControls) outControls.style.display = (tabName === 'output') ? 'flex' : 'none';
+    if (portsControls) portsControls.style.display = (tabName === 'ports') ? 'flex' : 'none';
+
+    if (tabName === 'problems') {
+      this.refreshProblems();
+    } else if (tabName === 'ports') {
+      this.refreshPorts();
+    } else if (tabName === 'terminal') {
+      document.getElementById('terminal-input')?.focus();
+    } else if (tabName === 'debug') {
+      document.getElementById('debug-console-input')?.focus();
+    }
+  },
+
+  toggleBottomPanel(forceOpen = null) {
+    const termPanel = document.getElementById('terminal-panel');
+    const btnBottom = document.getElementById('btn-toggle-bottom-panel');
+    if (!termPanel) return;
+    const willShow = forceOpen !== null ? forceOpen : (termPanel.style.display === 'none');
+    termPanel.style.display = willShow ? 'flex' : 'none';
+    btnBottom?.classList.toggle('active', willShow);
+    if (willShow) {
+      if (this.activeBottomTab === 'terminal') {
+        document.getElementById('terminal-input')?.focus();
+      } else if (this.activeBottomTab === 'debug') {
+        document.getElementById('debug-console-input')?.focus();
+      }
+    }
+    setTimeout(() => {
+      this.editor?.layout();
+      this.diffEditor?.layout();
+    }, 50);
+  },
+
+  refreshProblems() {
+    const container = document.getElementById('problems-container');
+    const badge = document.getElementById('problems-count-badge');
+    if (!container) return;
+
+    let markers = [];
+    if (window.monaco && this.editor) {
+      markers = monaco.editor.getModelMarkers({});
+    }
+
+    if (badge) badge.textContent = markers.length;
+
+    if (markers.length === 0) {
+      container.innerHTML = `
+        <div class="bottom-empty-state">
+          <span class="empty-icon" style="color: #10b981;">✔</span>
+          <span>Không phát hiện vấn đề hay lỗi cú pháp nào trong không gian làm việc hiện tại.</span>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = '';
+    markers.forEach(m => {
+      const item = document.createElement('div');
+      item.className = 'problem-item';
+      const isErr = m.severity === 8;
+      const isWarn = m.severity === 4;
+      const icon = isErr ? '❌' : isWarn ? '⚠️' : 'ℹ️';
+      const iconClass = isErr ? 'error' : isWarn ? 'warning' : 'info';
+
+      const fileName = m.resource?.path?.split(/[\\/]/).pop() || 'Tệp hiện tại';
+
+      item.innerHTML = `
+        <span class="problem-icon ${iconClass}">${icon}</span>
+        <span class="problem-msg">${this.escapeHtml(m.message)}</span>
+        <span class="problem-location">${fileName} [${m.startLineNumber}, ${m.startColumn}]</span>
+      `;
+
+      item.addEventListener('click', () => {
+        if (m.resource?.fsPath) {
+          this.openFile(m.resource.fsPath, m.startLineNumber);
+        } else if (this.editor) {
+          this.editor.revealPositionInCenter({ lineNumber: m.startLineNumber, column: m.startColumn });
+          this.editor.setPosition({ lineNumber: m.startLineNumber, column: m.startColumn });
+          this.editor.focus();
+        }
+      });
+
+      container.appendChild(item);
+    });
+  },
+
+  logOutput(channel, text, type = 'info') {
+    const container = document.getElementById('output-log-container');
+    if (!container) return;
+    const line = document.createElement('div');
+    line.className = `output-line ${type}`;
+    line.setAttribute('data-channel', channel);
+    const time = new Date().toLocaleTimeString();
+    line.textContent = `[${time}] [${channel}] ${text}`;
+    container.appendChild(line);
+    container.scrollTop = container.scrollHeight;
+  },
+
+  setupDebugConsole() {
+    const input = document.getElementById('debug-console-input');
+    const output = document.getElementById('debug-console-output');
+    if (!input || !output) return;
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const val = input.value.trim();
+        if (!val) return;
+        input.value = '';
+
+        const inLine = document.createElement('div');
+        inLine.className = 'debug-line input';
+        inLine.textContent = `> ${val}`;
+        output.appendChild(inLine);
+
+        try {
+          const evaluated = eval(val);
+          const outLine = document.createElement('div');
+          outLine.className = 'debug-line result';
+          outLine.textContent = typeof evaluated === 'object' ? JSON.stringify(evaluated, null, 2) : String(evaluated);
+          output.appendChild(outLine);
+        } catch (err) {
+          const errLine = document.createElement('div');
+          errLine.className = 'debug-line error';
+          errLine.textContent = `Uncaught ${err.name}: ${err.message}`;
+          output.appendChild(errLine);
+        }
+        output.scrollTop = output.scrollHeight;
+      }
+    });
+  },
+
+  async refreshPorts() {
+    const tbody = document.getElementById('ports-table-body');
+    const badge = document.getElementById('ports-count-badge');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="5" style="color: var(--text-dim); text-align: center; padding: 12px;">Đang quét các cổng mạng cục bộ...</td></tr>';
+
+    const testPorts = [
+      { port: 3000, desc: 'Web App / Next.js / React' },
+      { port: 5173, desc: 'Vite Dev Server' },
+      { port: 8080, desc: 'Webpack / Local Backend' },
+      { port: 11434, desc: 'Ollama Local AI API' },
+      { port: 8000, desc: 'Python FastAPI / Django' },
+      { port: 5000, desc: 'Flask / Express Server' }
+    ];
+
+    let openCount = 0;
+    const rows = [];
+
+    for (const p of testPorts) {
+      let isOpen = false;
+      try {
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), 400);
+        await fetch(`http://127.0.0.1:${p.port}`, { method: 'GET', mode: 'no-cors', signal: ctrl.signal });
+        clearTimeout(timeout);
+        isOpen = true;
+      } catch (e) {
+        isOpen = false;
+      }
+
+      if (isOpen) {
+        openCount++;
+        rows.push(`
+          <tr>
+            <td><b style="color: var(--accent-blue);">${p.port}</b></td>
+            <td>HTTP / TCP</td>
+            <td>${p.desc}</td>
+            <td><span class="port-status-pill open">● OPEN</span></td>
+            <td>
+              <button type="button" class="port-open-btn" onclick="window.AisaHorizon?.openExternal('http://localhost:${p.port}')">Mở trình duyệt ↗</button>
+            </td>
+          </tr>
+        `);
+      }
+    }
+
+    if (badge) badge.textContent = openCount;
+
+    if (rows.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="color: var(--text-dim); text-align: center; padding: 16px;">
+            Không phát hiện máy chủ cục bộ nào đang lắng nghe trên các cổng phổ biến (3000, 5173, 8080, 11434). Hãy chạy lệnh 'npm run dev' hoặc khởi động server!
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML = rows.join('');
+    }
+  },
+
+  setupTerminalRunner() {
     const input = document.getElementById('terminal-input');
     const btnClear = document.getElementById('btn-clear-terminal');
     const btnStop = document.getElementById('btn-stop-terminal');
-    const btnClose = document.getElementById('btn-close-terminal');
-    const termPanel = document.getElementById('terminal-panel');
     const runningBadge = document.getElementById('terminal-running-badge');
 
     let history = [];
@@ -1778,7 +2203,8 @@ window.AisaHorizonApp = {
           historyIdx = -1;
           input.value = '';
 
-          this.printTerminal(`\nPS ${this.activeWorkspace}> ${cmd}`, '#f472b6');
+          const prefix = this.selectedShell === 'cmd' ? 'CMD' : 'PS';
+          this.printTerminal(`\n${prefix} ${this.activeWorkspace}> ${cmd}`, '#f472b6');
 
           if (cmd.toLowerCase() === 'clear' || cmd.toLowerCase() === 'cls') {
             this.clearTerminal();
@@ -1805,13 +2231,6 @@ window.AisaHorizonApp = {
     }
 
     if (btnClear) btnClear.addEventListener('click', () => this.clearTerminal());
-    if (btnClose && termPanel) {
-      btnClose.addEventListener('click', () => {
-        termPanel.style.display = 'none';
-        document.getElementById('act-btn-terminal')?.classList.remove('active');
-        document.getElementById('btn-toggle-bottom-panel')?.classList.remove('active');
-      });
-    }
   },
 
   printTerminal(text, color = '#cbd5e1') {
@@ -1837,9 +2256,8 @@ window.AisaHorizonApp = {
     const tab = this.openTabs.find(t => t.path === this.activeTabPath);
     if (!tab) return;
 
-    const termPanel = document.getElementById('terminal-panel');
-    if (termPanel) termPanel.style.display = 'flex';
-    document.getElementById('act-btn-terminal')?.classList.add('active');
+    this.switchBottomTab('terminal');
+    this.toggleBottomPanel(true);
 
     this.mascotSay(`⚡ Đang thực thi tệp: ${tab.name}...`);
 
@@ -2760,12 +3178,205 @@ window.AisaHorizonApp = {
   },
 
   // ==========================================================================
-  // 15. GLOBAL KEYBOARD SHORTCUTS
+  // 15. SETTINGS & PREFERENCES MODAL (CTRL+,)
+  // ==========================================================================
+  setupSettingsModal() {
+    const modal = document.getElementById('modal-settings');
+    const closeBtn = document.getElementById('btn-close-settings-modal');
+    const navBtns = document.querySelectorAll('.settings-nav-btn');
+
+    navBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-settings-tab');
+        if (tab) this.switchSettingsTab(tab);
+      });
+    });
+
+    closeBtn?.addEventListener('click', () => this.closeSettingsModal());
+    modal?.addEventListener('click', (e) => {
+      if (e.target === modal) this.closeSettingsModal();
+    });
+
+    // Font size
+    const fontSizeInput = document.getElementById('setting-font-size');
+    if (fontSizeInput) {
+      fontSizeInput.addEventListener('change', (e) => {
+        const size = parseInt(e.target.value) || 14;
+        this.editor?.updateOptions({ fontSize: size });
+        localStorage.setItem('mhent_horizon_font_size', size);
+      });
+    }
+
+    // Word wrap
+    const wordWrapSelect = document.getElementById('setting-word-wrap');
+    if (wordWrapSelect) {
+      wordWrapSelect.addEventListener('change', (e) => {
+        const val = e.target.value;
+        this.editor?.updateOptions({ wordWrap: val });
+        localStorage.setItem('mhent_horizon_word_wrap', val);
+      });
+    }
+
+    // Auto save
+    const autoSaveSelect = document.getElementById('setting-auto-save');
+    if (autoSaveSelect) {
+      autoSaveSelect.addEventListener('change', (e) => {
+        localStorage.setItem('mhent_horizon_auto_save', e.target.value);
+      });
+    }
+
+    // Browse workspace button
+    document.getElementById('btn-settings-browse-workspace')?.addEventListener('click', () => {
+      this.openWorkspaceFolder();
+      const wsInput = document.getElementById('setting-workspace-path');
+      if (wsInput) wsInput.value = this.activeWorkspace;
+    });
+
+    // Toggle Gemini key visibility
+    const keyInput = document.getElementById('setting-gemini-key');
+    const toggleKeyBtn = document.getElementById('btn-toggle-key-visibility');
+    if (keyInput && toggleKeyBtn) {
+      toggleKeyBtn.addEventListener('click', () => {
+        keyInput.type = (keyInput.type === 'password') ? 'text' : 'password';
+        toggleKeyBtn.textContent = (keyInput.type === 'password') ? '👁️' : '🔒';
+      });
+    }
+
+    // Save Gemini Key
+    document.getElementById('btn-save-gemini-key')?.addEventListener('click', async () => {
+      const newKey = keyInput ? keyInput.value.trim() : '';
+      if (window.AisaHorizon?.saveApiKey) {
+        await window.AisaHorizon.saveApiKey(newKey);
+      }
+      this.geminiKey = newKey;
+      localStorage.setItem('mhent_ai_api_key', newKey);
+      this.mascotSay('🌸 Harmony: Đã lưu API Key an toàn trong hệ thống Studio! ✨');
+      this.showToast({
+        title: 'Cài Đặt AI',
+        message: 'Đã lưu Google Gemini API Key an toàn trên máy.',
+        type: 'success'
+      });
+    });
+
+    // Test Ollama Connection
+    const testOllamaBtn = document.getElementById('btn-test-ollama');
+    const ollamaHint = document.getElementById('ollama-status-hint');
+    if (testOllamaBtn && ollamaHint) {
+      testOllamaBtn.addEventListener('click', async () => {
+        ollamaHint.textContent = 'Trạng thái: Đang kiểm tra cổng 11434...';
+        ollamaHint.style.color = '#38bdf8';
+        if (window.AisaHorizon?.checkOllama) {
+          const res = await window.AisaHorizon.checkOllama();
+          if (res?.connected) {
+            ollamaHint.textContent = `Trạng thái: ✔ Đã kết nối Ollama (${res.models?.length || 0} mô hình sẵn có)`;
+            ollamaHint.style.color = '#34d399';
+          } else {
+            ollamaHint.textContent = 'Trạng thái: ⚠ Không thấy tiến trình Ollama chạy ở http://localhost:11434';
+            ollamaHint.style.color = '#f87171';
+          }
+        }
+      });
+    }
+
+    // Default model select
+    const defaultModelSelect = document.getElementById('setting-default-model');
+    if (defaultModelSelect) {
+      defaultModelSelect.addEventListener('change', (e) => {
+        this.selectedModel = e.target.value;
+        const mainSelect = document.getElementById('select-agent-model');
+        if (mainSelect) mainSelect.value = this.selectedModel;
+      });
+    }
+
+    // Safety mode select
+    const safetyModeSelect = document.getElementById('setting-safety-mode');
+    if (safetyModeSelect) {
+      safetyModeSelect.addEventListener('change', (e) => {
+        this.safetyMode = e.target.value;
+        const stripText = document.getElementById('safety-mode-text');
+        if (stripText) {
+          stripText.innerHTML = this.safetyMode === 'ask'
+            ? 'Lệnh: <b>Hỏi trước khi chạy</b>'
+            : 'Lệnh: <b style="color: #f59e0b;">Tự động cho phép</b>';
+        }
+      });
+    }
+
+    // Mascot visibility switch
+    const mascotSwitch = document.getElementById('setting-mascot-visible');
+    const mascotWidget = document.getElementById('horizon-mascot-widget');
+    if (mascotSwitch && mascotWidget) {
+      mascotSwitch.addEventListener('change', (e) => {
+        mascotWidget.style.display = e.target.checked ? 'flex' : 'none';
+        document.getElementById('btn-toggle-mascot')?.classList.toggle('active', e.target.checked);
+      });
+    }
+  },
+
+  openSettingsModal(tab = 'general') {
+    const modal = document.getElementById('modal-settings');
+    if (!modal) return;
+    this.switchSettingsTab(tab);
+
+    const wsInput = document.getElementById('setting-workspace-path');
+    if (wsInput) wsInput.value = this.activeWorkspace;
+
+    const keyInput = document.getElementById('setting-gemini-key');
+    if (keyInput) keyInput.value = this.geminiKey || '';
+
+    const modelSelect = document.getElementById('setting-default-model');
+    if (modelSelect) modelSelect.value = this.selectedModel;
+
+    const safetySelect = document.getElementById('setting-safety-mode');
+    if (safetySelect) safetySelect.value = this.safetyMode;
+
+    modal.style.display = 'flex';
+  },
+
+  closeSettingsModal() {
+    const modal = document.getElementById('modal-settings');
+    if (modal) modal.style.display = 'none';
+  },
+
+  switchSettingsTab(tabName) {
+    const navBtns = document.querySelectorAll('.settings-nav-btn');
+    navBtns.forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-settings-tab') === tabName);
+    });
+
+    const panels = {
+      general: document.getElementById('settings-panel-general'),
+      ai: document.getElementById('settings-panel-ai'),
+      appearance: document.getElementById('settings-panel-appearance'),
+      shortcuts: document.getElementById('settings-panel-shortcuts'),
+      about: document.getElementById('settings-panel-about')
+    };
+
+    Object.keys(panels).forEach(k => {
+      const p = panels[k];
+      if (p) p.style.display = (k === tabName) ? 'flex' : 'none';
+    });
+  },
+
+  // ==========================================================================
+  // 16. GLOBAL KEYBOARD SHORTCUTS
   // ==========================================================================
   setupKeybindings() {
     window.addEventListener('keydown', (e) => {
+      // Ctrl + N (New File)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        this.createNewFilePrompt();
+      }
+
+      // Ctrl + O (Open Folder)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        this.openWorkspaceFolder();
+      }
+
       // Ctrl + S (Save)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         this.saveActiveFile();
       }
@@ -2776,34 +3387,64 @@ window.AisaHorizonApp = {
         this.saveAllFiles();
       }
 
+      // Ctrl + W (Close Active Tab)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        if (this.activeTabPath) this.closeTab(this.activeTabPath);
+      }
+
       // Ctrl + P (Quick Open)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         this.openQuickOpen();
       }
 
       // Ctrl + K (Inline AI)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         this.openInlineAI();
       }
 
       // Ctrl + B (Toggle Left Primary Sidebar)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         document.getElementById('btn-toggle-primary-sidebar')?.click();
       }
 
-      // Ctrl + ` (Terminal)
-      if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+      // Ctrl + ` or Ctrl + J (Toggle Bottom Panel)
+      if (((e.ctrlKey || e.metaKey) && e.key === '`') || ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'j')) {
         e.preventDefault();
-        const termPanel = document.getElementById('terminal-panel');
-        if (termPanel) {
-          const isHidden = termPanel.style.display === 'none';
-          termPanel.style.display = isHidden ? 'flex' : 'none';
-          document.getElementById('act-btn-terminal')?.classList.toggle('active', isHidden);
-          if (isHidden) document.getElementById('terminal-input')?.focus();
-        }
+        this.toggleBottomPanel();
+      }
+
+      // Ctrl + Shift + I (Toggle Right AI Sidecar)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        document.getElementById('btn-toggle-secondary-sidebar')?.click();
+      }
+
+      // Ctrl + Shift + E (Focus Explorer)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        document.getElementById('act-btn-explorer')?.click();
+      }
+
+      // Ctrl + Shift + F (Focus Search)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        document.getElementById('act-btn-search')?.click();
+      }
+
+      // Ctrl + Shift + G (Focus Git)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        document.getElementById('act-btn-git')?.click();
+      }
+
+      // Ctrl + , (Open Settings Modal)
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        this.openSettingsModal();
       }
 
       // F5 (Run active file)
@@ -2830,6 +3471,15 @@ window.AisaHorizonApp = {
           this.editor.updateOptions({ wordWrap: next });
           this.mascotSay(`Word wrap: ${next.toUpperCase()}`);
         }
+      }
+
+      // Escape (Close open overlays)
+      if (e.key === 'Escape') {
+        this.closeSettingsModal();
+        const quickOpen = document.getElementById('modal-quick-open');
+        if (quickOpen) quickOpen.style.display = 'none';
+        const ctxMenu = document.getElementById('file-context-menu');
+        if (ctxMenu) ctxMenu.style.display = 'none';
       }
     });
   },

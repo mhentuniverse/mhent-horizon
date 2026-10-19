@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
 
   // Gemini API Key for Copilot & Agent
   getApiKey: () => ipcRenderer.invoke('horizon:get-api-key'),
+  saveApiKey: (key) => ipcRenderer.invoke('horizon:save-api-key', key),
 
   // Autonomous Agent Tool Execution & Safety
   replaceFileContent: (filePath, targetContent, replacementContent) => ipcRenderer.invoke('horizon:replace-file-content', { filePath, targetContent, replacementContent }),
