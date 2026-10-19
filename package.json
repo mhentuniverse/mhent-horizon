@@ -20,10 +20,11 @@
   "author": "Yorutsuki Yurika (Miyazaki Haruto Entertainment Co., Ltd.)",
   "license": "UNLICENSED",
   "devDependencies": {
-    "electron": "^30.5.1",
+    "electron": "30.5.1",
     "electron-builder": "^24.13.3"
   },
   "build": {
+    "electronVersion": "30.5.1",
     "appId": "com.mhentuniverse.aisa.horizon",
     "productName": "AISA Horizon",
     "directories": {
