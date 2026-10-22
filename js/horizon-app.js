@@ -96,6 +96,12 @@ window.AisaHorizonApp = {
     // 15. Setup Global Keyboard Shortcuts
     this.setupKeybindings();
 
+    // 16. Setup Native File System Watcher & Focus Auto-Sync
+    this.setupWorkspaceWatcher();
+
+    // 17. Setup Drag and Drop File/Folder Import
+    this.setupDragAndDrop();
+
     this.mascotSay('🌸 Harmony: Chào mừng Yurika trở lại AISA Horizon Studio! Tụi em đã nâng cấp đầy đủ toàn bộ tính năng rồi nè! ✨');
   },
 
@@ -1405,6 +1411,23 @@ window.AisaHorizonApp = {
           this.openContextMenu(e.clientX, e.clientY, this.activeWorkspace, true, true);
         }
       });
+      container.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        container.classList.add('drag-over');
+      });
+      container.addEventListener('dragleave', (e) => {
+        if (!e.relatedTarget || !container.contains(e.relatedTarget)) {
+          container.classList.remove('drag-over');
+        }
+      });
+      container.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        container.classList.remove('drag-over');
+        if (!e.target.closest('.tree-item')) {
+          await this.handleFilesDrop(e, this.activeWorkspace);
+        }
+      });
     }
 
     const panelExplorer = document.getElementById('panel-explorer');
@@ -1415,6 +1438,16 @@ window.AisaHorizonApp = {
           e.preventDefault();
           this.selectTreeItem(null, this.activeWorkspace, true);
           this.openContextMenu(e.clientX, e.clientY, this.activeWorkspace, true, true);
+        }
+      });
+      panelExplorer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+      panelExplorer.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        if (!e.target.closest('.tree-item')) {
+          await this.handleFilesDrop(e, this.activeWorkspace);
         }
       });
     }
@@ -1680,6 +1713,19 @@ window.AisaHorizonApp = {
       childrenContainer.className = 'tree-folder-children';
       childrenContainer.style.display = isExpanded ? 'flex' : 'none';
 
+      // Preload children if folder is in expanded state
+      if (isExpanded) {
+        window.AisaHorizon.readDir(item.path).then(async (subRes) => {
+          if (subRes && subRes.success && subRes.items.length > 0) {
+            childrenContainer.innerHTML = '';
+            for (const subItem of subRes.items) {
+              const subEl = await this.renderTreeItem(subItem, depth + 1);
+              childrenContainer.appendChild(subEl);
+            }
+          }
+        });
+      }
+
       row.addEventListener('click', async (e) => {
         e.stopPropagation();
         this.selectTreeItem(row, item.path, true);
@@ -1716,6 +1762,27 @@ window.AisaHorizonApp = {
         this.openContextMenu(e.clientX, e.clientY, item.path, true, false);
       });
 
+      // Drag & Drop onto Folder
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('drag-over');
+      });
+
+      row.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        row.classList.remove('drag-over');
+      });
+
+      row.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        row.classList.remove('drag-over');
+        await this.handleFilesDrop(e, item.path);
+      });
+
       wrapper.appendChild(row);
       wrapper.appendChild(childrenContainer);
     } else {
@@ -1736,6 +1803,20 @@ window.AisaHorizonApp = {
         e.stopPropagation();
         this.selectTreeItem(row, item.path, false);
         this.openContextMenu(e.clientX, e.clientY, item.path, false, false);
+      });
+
+      // Drag & Drop onto File (drops into containing folder)
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+
+      row.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const parentDir = item.path.substring(0, item.path.lastIndexOf('\\'));
+        await this.handleFilesDrop(e, parentDir);
       });
 
       wrapper.appendChild(row);
@@ -3740,6 +3821,191 @@ window.AisaHorizonApp = {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
+  },
+
+  // ==========================================================================
+  // 14. NATIVE FILE SYSTEM WATCHER & AUTOMATIC DISK SYNCHRONIZATION
+  // ==========================================================================
+  setupWorkspaceWatcher() {
+    if (!window.AisaHorizon) return;
+
+    if (window.AisaHorizon.onWorkspaceChanged) {
+      window.AisaHorizon.onWorkspaceChanged(async (data) => {
+        console.log('[AISA Horizon] External workspace change detected:', data);
+        // Seamlessly update explorer tree
+        await this.refreshFileTree();
+        // Update git change indicators
+        this.refreshGitStatus();
+
+        // If an open active tab was changed externally on disk and has no unsaved edits, reload content
+        if (data && data.fullPath) {
+          const openTab = this.openTabs.find(t => t.path.toLowerCase() === data.fullPath.toLowerCase());
+          if (openTab && !openTab.isDirty && openTab.model && !openTab.isMedia && !openTab.isBinary) {
+            try {
+              const res = await window.AisaHorizon.readFile(openTab.path);
+              if (res && res.success && res.content !== undefined) {
+                const currentVal = openTab.model.getValue();
+                if (currentVal !== res.content) {
+                  openTab.model.setValue(res.content);
+                  this.showToast({
+                    title: 'Đồng bộ tự động',
+                    message: `Tệp [${openTab.name}] vừa được cập nhật tự động từ ổ đĩa!`,
+                    type: 'info'
+                  });
+                }
+              }
+            } catch (e) {}
+          }
+        }
+      });
+    }
+
+    if (window.AisaHorizon.onWindowFocused) {
+      window.AisaHorizon.onWindowFocused(async () => {
+        await this.refreshFileTree();
+      });
+    }
+
+    window.addEventListener('focus', () => {
+      this.refreshFileTree();
+    });
+  },
+
+  // ==========================================================================
+  // 15. NATIVE DRAG & DROP FILE/FOLDER IMPORT (DESKTOP TO WORKSPACE)
+  // ==========================================================================
+  setupDragAndDrop() {
+    // 1. Prevent default drag behaviors on window so dropping doesn't open file in raw browser
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    }, false);
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+    }, false);
+
+    // 2. Tree Container Drop Zone
+    const treeContainer = document.getElementById('file-tree-container');
+    if (treeContainer) {
+      treeContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        treeContainer.classList.add('drag-over');
+      });
+
+      treeContainer.addEventListener('dragleave', (e) => {
+        if (!e.relatedTarget || !treeContainer.contains(e.relatedTarget)) {
+          treeContainer.classList.remove('drag-over');
+        }
+      });
+
+      treeContainer.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        treeContainer.classList.remove('drag-over');
+        if (!e.target.closest('.tree-item')) {
+          await this.handleFilesDrop(e, this.activeWorkspace);
+        }
+      });
+    }
+
+    // 3. Editor Tabs Bar Drop Zone (Open files in tabs)
+    const tabsBar = document.getElementById('editor-tabs-bar');
+    if (tabsBar) {
+      tabsBar.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        tabsBar.classList.add('drag-over');
+      });
+
+      tabsBar.addEventListener('dragleave', (e) => {
+        if (!e.relatedTarget || !tabsBar.contains(e.relatedTarget)) {
+          tabsBar.classList.remove('drag-over');
+        }
+      });
+
+      tabsBar.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        tabsBar.classList.remove('drag-over');
+        await this.handleEditorDrop(e);
+      });
+    }
+
+    // 4. Editor Area Drop Zone
+    const editorWrapper = document.querySelector('.monaco-wrapper');
+    const emptyState = document.getElementById('editor-empty-state');
+    [editorWrapper, emptyState].forEach(zone => {
+      if (!zone) return;
+      zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+
+      zone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        await this.handleEditorDrop(e);
+      });
+    });
+  },
+
+  async handleFilesDrop(e, targetDir) {
+    const rawFiles = Array.from(e.dataTransfer?.files || []);
+    if (rawFiles.length === 0) return;
+
+    const sourcePaths = rawFiles.map(f => {
+      return window.AisaHorizon?.getPathForFile ? window.AisaHorizon.getPathForFile(f) : (f.path || '');
+    }).filter(Boolean);
+
+    if (sourcePaths.length === 0) return;
+
+    const target = targetDir || this.activeWorkspace;
+    const folderName = target.split(/[\\/]/).pop() || 'Workspace';
+
+    this.showToast({
+      title: 'Đang thêm tệp...',
+      message: `Đang sao chép ${sourcePaths.length} mục vào [${folderName}]...`,
+      type: 'info'
+    });
+
+    if (window.AisaHorizon?.importFiles) {
+      const res = await window.AisaHorizon.importFiles(sourcePaths, target);
+      if (res && res.success && res.imported && res.imported.length > 0) {
+        if (target !== this.activeWorkspace) {
+          this.expandedFolders.add(target);
+        }
+        await this.refreshFileTree();
+        this.mascotSay(`🌸 Harmony: Đã thêm thành công ${res.imported.length} mục vào [${folderName}] rồi nè! ✨`);
+        this.showToast({
+          title: 'Đã thêm thành công',
+          message: `Đã thêm ${res.imported.length} mục vào [${folderName}]!`,
+          type: 'success'
+        });
+
+        // Open the first imported file if it's not a directory
+        const firstFile = res.imported.find(item => !item.isDirectory);
+        if (firstFile) {
+          await this.openFile(firstFile.destination);
+        }
+      } else if (res && res.errors && res.errors.length > 0) {
+        this.showToast({
+          title: 'Lỗi thêm tệp',
+          message: res.errors[0]?.error || 'Không thể thêm tệp',
+          type: 'error'
+        });
+      }
+    }
+  },
+
+  async handleEditorDrop(e) {
+    const rawFiles = Array.from(e.dataTransfer?.files || []);
+    if (rawFiles.length === 0) return;
+
+    for (const f of rawFiles) {
+      const filePath = window.AisaHorizon?.getPathForFile ? window.AisaHorizon.getPathForFile(f) : (f.path || '');
+      if (filePath) {
+        await this.openFile(filePath);
+      }
+    }
+    this.mascotSay(`🌸 Harmony: Đã mở tệp kéo thả vào trình soạn thảo! ✨`);
   },
 
   // ==========================================================================

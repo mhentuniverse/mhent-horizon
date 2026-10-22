@@ -4,7 +4,7 @@
  * Miyazaki Haruto Entertainment Co., Ltd.
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('AisaHorizon', {
   isDesktop: true,
@@ -16,11 +16,13 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   closeWindow: () => ipcRenderer.send('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
 
-  // Workspace Operations
+  // Workspace Operations & File System Watcher
   getWorkspacePath: () => ipcRenderer.invoke('horizon:get-workspace-path'),
   openWorkspaceDialog: () => ipcRenderer.invoke('horizon:open-workspace-dialog'),
   setWorkspacePath: (newPath) => ipcRenderer.invoke('horizon:set-workspace-path', newPath),
   readDir: (dirPath = null) => ipcRenderer.invoke('horizon:read-dir', dirPath),
+  onWorkspaceChanged: (callback) => ipcRenderer.on('horizon:workspace-changed', (event, val) => callback(val)),
+  onWindowFocused: (callback) => ipcRenderer.on('horizon:window-focused', (event, val) => callback(val)),
 
   // File Operations (Monaco Editor & Media Integration)
   readFile: (filePath) => ipcRenderer.invoke('horizon:read-file', filePath),
@@ -33,6 +35,17 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   openExternal: (targetPath) => ipcRenderer.invoke('horizon:open-external', targetPath),
   searchFiles: (params) => ipcRenderer.invoke('horizon:search-files', params),
   listAllFiles: () => ipcRenderer.invoke('horizon:list-all-files'),
+
+  // Drag & Drop Import & Path Resolution
+  importFiles: (sourcePaths, targetDir) => ipcRenderer.invoke('horizon:import-files', { sourcePaths, targetDir }),
+  getPathForFile: (file) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch (e) {}
+    return file?.path || '';
+  },
 
   // Git Source Control (Multi-Repo Support)
   getGitRepos: () => ipcRenderer.invoke('horizon:get-git-repos'),

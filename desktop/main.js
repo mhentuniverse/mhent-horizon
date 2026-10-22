@@ -80,6 +80,55 @@ function getApiKey() {
   return '';
 }
 
+let workspaceWatcher = null;
+let watcherDebounceTimer = null;
+
+function startWorkspaceWatcher(wsPath) {
+  if (workspaceWatcher) {
+    try {
+      workspaceWatcher.close();
+    } catch (e) {}
+    workspaceWatcher = null;
+  }
+
+  if (!wsPath || !fs.existsSync(wsPath)) return;
+
+  try {
+    workspaceWatcher = fs.watch(wsPath, { recursive: true }, (eventType, filename) => {
+      if (!filename) return;
+
+      const norm = filename.replace(/\\/g, '/');
+      if (
+        norm.startsWith('.git/') || norm === '.git' ||
+        norm.includes('/node_modules/') || norm.startsWith('node_modules/') || norm === 'node_modules' ||
+        norm.includes('/dist/') || norm.startsWith('dist/') || norm === 'dist' ||
+        norm.includes('/.gemini/') || norm.startsWith('.gemini/') || norm === '.gemini' ||
+        norm.includes('/$RECYCLE.BIN/') || norm.startsWith('$RECYCLE.BIN/') ||
+        norm.endsWith('.tmp') || norm.endsWith('~') || norm.includes('.crdownload')
+      ) {
+        return;
+      }
+
+      if (watcherDebounceTimer) clearTimeout(watcherDebounceTimer);
+      watcherDebounceTimer = setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('horizon:workspace-changed', {
+            eventType,
+            filename,
+            fullPath: path.join(wsPath, filename)
+          });
+        }
+      }, 350);
+    });
+
+    workspaceWatcher.on('error', (err) => {
+      console.warn('[Workspace Watcher Error]', err);
+    });
+  } catch (err) {
+    console.warn('[Failed to start workspace watcher]', err);
+  }
+}
+
 async function createWindow() {
   const iconPath = path.join(__dirname, '..', 'assets', 'horizon-logo.png');
 
@@ -104,7 +153,21 @@ async function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
 
+  mainWindow.on('focus', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('horizon:window-focused');
+    }
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    startWorkspaceWatcher(activeWorkspacePath);
+  });
+
   mainWindow.on('closed', () => {
+    if (workspaceWatcher) {
+      try { workspaceWatcher.close(); } catch (e) {}
+      workspaceWatcher = null;
+    }
     mainWindow = null;
   });
 }
@@ -158,6 +221,7 @@ ipcMain.handle('horizon:open-workspace-dialog', async () => {
   if (!res.canceled && res.filePaths && res.filePaths.length > 0) {
     activeWorkspacePath = path.resolve(res.filePaths[0]);
     saveWorkspaceState(activeWorkspacePath);
+    startWorkspaceWatcher(activeWorkspacePath);
     return activeWorkspacePath;
   }
   return null;
@@ -167,6 +231,7 @@ ipcMain.handle('horizon:set-workspace-path', (event, newPath) => {
   if (fs.existsSync(newPath)) {
     activeWorkspacePath = path.resolve(newPath);
     saveWorkspaceState(activeWorkspacePath);
+    startWorkspaceWatcher(activeWorkspacePath);
     return { success: true, path: activeWorkspacePath };
   }
   return { success: false, error: 'Thư mục không tồn tại' };
@@ -405,6 +470,65 @@ ipcMain.handle('horizon:open-external', async (event, targetPath) => {
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+// Drag & Drop Import Files & Folders into Target Directory
+ipcMain.handle('horizon:import-files', async (event, { sourcePaths, targetDir }) => {
+  try {
+    const destDir = path.resolve(targetDir || activeWorkspacePath);
+    if (!fs.existsSync(destDir)) {
+      await fsPromises.mkdir(destDir, { recursive: true });
+    }
+
+    const imported = [];
+    const errors = [];
+
+    for (const src of (sourcePaths || [])) {
+      try {
+        const srcPath = path.resolve(src);
+        if (!fs.existsSync(srcPath)) continue;
+
+        const baseName = path.basename(srcPath);
+        let destPath = path.join(destDir, baseName);
+
+        // Skip if source and target are the same file
+        if (srcPath.toLowerCase() === destPath.toLowerCase()) {
+          continue;
+        }
+
+        // Avoid overwriting if file with same name exists
+        if (fs.existsSync(destPath)) {
+          const ext = path.extname(baseName);
+          const nameWithoutExt = path.basename(baseName, ext);
+          let counter = 1;
+          while (fs.existsSync(path.join(destDir, `${nameWithoutExt} (${counter})${ext}`))) {
+            counter++;
+          }
+          destPath = path.join(destDir, `${nameWithoutExt} (${counter})${ext}`);
+        }
+
+        const stat = await fsPromises.stat(srcPath);
+        if (stat.isDirectory()) {
+          await fsPromises.cp(srcPath, destPath, { recursive: true, force: true });
+        } else {
+          await fsPromises.copyFile(srcPath, destPath);
+        }
+
+        imported.push({
+          source: srcPath,
+          destination: destPath,
+          name: path.basename(destPath),
+          isDirectory: stat.isDirectory()
+        });
+      } catch (itemErr) {
+        errors.push({ source: src, error: itemErr.message });
+      }
+    }
+
+    return { success: true, imported, errors };
+  } catch (err) {
+    return { success: false, error: err.message, imported: [] };
   }
 });
 
