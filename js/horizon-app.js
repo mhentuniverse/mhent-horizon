@@ -25,6 +25,9 @@ window.AisaHorizonApp = {
   selectedGitRepo: null,
   safetyMode: 'ask', // 'ask' | 'auto'
   selectedModel: 'gemini-2.0-flash',
+  activeActivityTab: 'act-btn-explorer',
+  activeBottomTab: 'terminal',
+  _saveSessionTimer: null,
 
   async init() {
     console.log('%c[AISA Horizon IDE] Initializing Celestial Studio v2.0...', 'color: #38bdf8; font-weight: bold;');
@@ -38,24 +41,43 @@ window.AisaHorizonApp = {
     this.setupModelHub();
     this.setupWelcomeScreen();
 
-    // 2. Load API Key and Active Workspace
+    // 2. Load API Key, Active Workspace and Previous Session State
+    let sessionState = null;
     if (window.AisaHorizon) {
       try {
         this.geminiKey = await window.AisaHorizon.getApiKey();
-        this.activeWorkspace = await window.AisaHorizon.getWorkspacePath();
+        sessionState = await window.AisaHorizon.getSessionState();
       } catch (err) {
         console.error('Error getting initial horizon state:', err);
       }
     }
+    if (!sessionState) {
+      try {
+        const local = localStorage.getItem('mhent_horizon_session_state');
+        if (local) sessionState = JSON.parse(local);
+      } catch (e) {}
+    }
+
+    if (sessionState && sessionState.workspace) {
+      this.activeWorkspace = sessionState.workspace;
+    }
+    if (!this.activeWorkspace && window.AisaHorizon) {
+      this.activeWorkspace = await window.AisaHorizon.getWorkspacePath();
+    }
     if (!this.activeWorkspace) {
       this.activeWorkspace = 'c:\\Users\\Yorutsuki Yurika\\Documents\\Miyazaki Haruto Entertainment Co., Ltd. - Project MHEnt. Universe';
+    }
+
+    // Restore expanded folders before file tree render
+    if (sessionState && Array.isArray(sessionState.expandedFolders)) {
+      this.expandedFolders = new Set(sessionState.expandedFolders);
     }
 
     this.updateWorkspaceUI(this.activeWorkspace);
     this.updateWindowTitle();
 
     // 3. Initialize Monaco Editor & Diff Editor
-    this.initMonaco();
+    await this.initMonaco();
 
     // 4. Setup Activity Bar & Subpanel Navigation
     this.setupActivityBar();
@@ -102,7 +124,15 @@ window.AisaHorizonApp = {
     // 17. Setup Drag and Drop File/Folder Import
     this.setupDragAndDrop();
 
-    this.mascotSay('🌸 Harmony: Chào mừng Yurika trở lại AISA Horizon Studio! Tụi em đã nâng cấp đầy đủ toàn bộ tính năng rồi nè! ✨');
+    // 18. Restore Previous Working Session (Tabs, Cursor, Panels, Layout)
+    await this.restoreSession(sessionState);
+
+    // 19. Synchronous Save on Window Unload
+    window.addEventListener('beforeunload', () => {
+      this.saveSessionState();
+    });
+
+    this.mascotSay('🌸 Harmony: Chào mừng Yurika trở lại AISA Horizon Studio! Em đã tự động mở lại toàn bộ phiên làm việc trước đó cho Yurika rồi nè! ✨');
   },
 
   // ==========================================================================
@@ -168,6 +198,7 @@ window.AisaHorizonApp = {
         this.updateWorkspaceUI(newPath);
         await this.refreshFileTree();
         await this.loadGitRepos();
+        this.debouncedSaveSession();
         this.mascotSay(`Đã mở không gian làm việc: ${newPath.split(/[\\/]/).pop()} 📂`);
         this.showToast({
           title: 'Không gian làm việc',
@@ -213,6 +244,7 @@ window.AisaHorizonApp = {
         this.editor?.layout();
         this.diffEditor?.layout();
       }, 50);
+      this.debouncedSaveSession();
     };
 
     if (btnLeft && sidebar) {
@@ -238,6 +270,165 @@ window.AisaHorizonApp = {
     const dynTitle = document.getElementById('dynamic-window-title');
     if (dynTitle) {
       dynTitle.addEventListener('click', () => this.openWorkspaceFolder());
+    }
+  },
+
+  // ==========================================================================
+  // SESSION PERSISTENCE & RESTORE (AUTO-REOPEN PREVIOUS SESSION)
+  // ==========================================================================
+  saveSessionState() {
+    try {
+      if (this.activeTabPath && this.editor) {
+        const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
+        if (currentTab && !currentTab.isMedia && !currentTab.isBinary) {
+          const pos = this.editor.getPosition();
+          if (pos) currentTab._lastCursor = { lineNumber: pos.lineNumber, column: pos.column };
+          currentTab._lastScrollTop = this.editor.getScrollTop();
+          currentTab._lastScrollLeft = this.editor.getScrollLeft();
+        }
+      }
+
+      const tabsData = this.openTabs.map(t => ({
+        path: t.path,
+        cursor: t._lastCursor || null,
+        scrollTop: typeof t._lastScrollTop === 'number' ? t._lastScrollTop : 0,
+        scrollLeft: typeof t._lastScrollLeft === 'number' ? t._lastScrollLeft : 0,
+        isMedia: !!t.isMedia,
+        isBinary: !!t.isBinary
+      }));
+
+      const sidebar = document.getElementById('horizon-sidebar');
+      const terminal = document.getElementById('terminal-panel');
+      const copilot = document.getElementById('horizon-copilot-panel');
+
+      const sessionState = {
+        workspace: this.activeWorkspace,
+        openTabs: tabsData,
+        activeTabPath: this.activeTabPath,
+        expandedFolders: Array.from(this.expandedFolders || []),
+        leftSidebarVisible: sidebar ? sidebar.style.display !== 'none' : true,
+        bottomPanelVisible: terminal ? terminal.style.display !== 'none' : true,
+        bottomPanelTab: this.activeBottomTab || 'terminal',
+        copilotVisible: copilot ? copilot.style.display !== 'none' : true,
+        activeActivityTab: this.activeActivityTab || 'act-btn-explorer',
+        sidebarWidth: sidebar?.style?.width || '',
+        bottomHeight: terminal?.style?.height || '',
+        copilotWidth: copilot?.style?.width || '',
+        updatedAt: Date.now()
+      };
+
+      try {
+        localStorage.setItem('mhent_horizon_session_state', JSON.stringify(sessionState));
+      } catch (e) {}
+
+      if (window.AisaHorizon && window.AisaHorizon.saveSessionState) {
+        window.AisaHorizon.saveSessionState(sessionState);
+      }
+    } catch (err) {
+      console.warn('Lỗi lưu phiên làm việc:', err);
+    }
+  },
+
+  debouncedSaveSession() {
+    if (this._saveSessionTimer) clearTimeout(this._saveSessionTimer);
+    this._saveSessionTimer = setTimeout(() => {
+      this.saveSessionState();
+    }, 400);
+  },
+
+  async restoreSession(cachedState = null) {
+    try {
+      let state = cachedState;
+      if (!state && window.AisaHorizon && window.AisaHorizon.getSessionState) {
+        state = await window.AisaHorizon.getSessionState();
+      }
+      if (!state) {
+        const local = localStorage.getItem('mhent_horizon_session_state');
+        if (local) {
+          try { state = JSON.parse(local); } catch (e) {}
+        }
+      }
+      if (!state) return;
+
+      // 1. Restore Layout Visibility & Sizes
+      const sidebar = document.getElementById('horizon-sidebar');
+      const terminal = document.getElementById('terminal-panel');
+      const copilot = document.getElementById('horizon-copilot-panel');
+      const btnLeft = document.getElementById('btn-toggle-primary-sidebar');
+      const btnBottom = document.getElementById('btn-toggle-bottom-panel');
+      const btnRight = document.getElementById('btn-toggle-secondary-sidebar');
+      const actBtnCopilot = document.getElementById('act-btn-copilot');
+
+      if (sidebar && typeof state.leftSidebarVisible === 'boolean') {
+        sidebar.style.display = state.leftSidebarVisible ? 'flex' : 'none';
+        btnLeft?.classList.toggle('active', state.leftSidebarVisible);
+      }
+      if (sidebar && state.sidebarWidth) {
+        sidebar.style.width = state.sidebarWidth;
+      }
+
+      if (terminal && typeof state.bottomPanelVisible === 'boolean') {
+        terminal.style.display = state.bottomPanelVisible ? 'flex' : 'none';
+        btnBottom?.classList.toggle('active', state.bottomPanelVisible);
+      }
+      if (terminal && state.bottomHeight) {
+        terminal.style.height = state.bottomHeight;
+      }
+
+      if (copilot && typeof state.copilotVisible === 'boolean') {
+        copilot.style.display = state.copilotVisible ? 'flex' : 'none';
+        btnRight?.classList.toggle('active', state.copilotVisible);
+        actBtnCopilot?.classList.toggle('active', state.copilotVisible);
+      }
+      if (copilot && state.copilotWidth) {
+        copilot.style.width = state.copilotWidth;
+      }
+
+      if (state.bottomPanelTab) {
+        this.switchBottomTab(state.bottomPanelTab);
+      }
+
+      if (state.activeActivityTab) {
+        this.activeActivityTab = state.activeActivityTab;
+        const actBtn = document.getElementById(state.activeActivityTab);
+        actBtn?.click();
+      }
+
+      // 2. Restore Open Tabs
+      if (Array.isArray(state.openTabs) && state.openTabs.length > 0) {
+        const targetActive = state.activeTabPath || state.openTabs[state.openTabs.length - 1].path;
+
+        for (const t of state.openTabs) {
+          const tabPath = typeof t === 'string' ? t : t.path;
+          if (!tabPath) continue;
+
+          // Open tab without switching initially
+          await this.openFile(tabPath, null, false);
+
+          const loadedTab = this.openTabs.find(tab => tab.path === tabPath);
+          if (loadedTab && typeof t === 'object') {
+            if (t.cursor) loadedTab._lastCursor = t.cursor;
+            if (typeof t.scrollTop === 'number') loadedTab._lastScrollTop = t.scrollTop;
+            if (typeof t.scrollLeft === 'number') loadedTab._lastScrollLeft = t.scrollLeft;
+          }
+        }
+
+        // Switch to the target active tab and apply cursor & scroll position
+        if (targetActive && this.openTabs.some(t => t.path === targetActive)) {
+          this.switchTab(targetActive);
+        } else if (this.openTabs.length > 0) {
+          this.switchTab(this.openTabs[0].path);
+        }
+      }
+
+      // Layout refresh after all restorations
+      setTimeout(() => {
+        this.editor?.layout();
+        this.diffEditor?.layout();
+      }, 80);
+
+    } catch (e) {
+      console.warn('Lỗi khi khôi phục phiên làm việc:', e);
     }
   },
 
@@ -276,6 +467,7 @@ window.AisaHorizonApp = {
           document.body.classList.remove('resizing-active');
           this.editor?.layout();
           this.diffEditor?.layout();
+          this.debouncedSaveSession();
         }
       });
     }
@@ -305,6 +497,7 @@ window.AisaHorizonApp = {
           document.body.classList.remove('resizing-active');
           this.editor?.layout();
           this.diffEditor?.layout();
+          this.debouncedSaveSession();
         }
       });
     }
@@ -335,6 +528,7 @@ window.AisaHorizonApp = {
           document.body.classList.remove('resizing-active');
           this.editor?.layout();
           this.diffEditor?.layout();
+          this.debouncedSaveSession();
         }
       });
     }
@@ -785,6 +979,7 @@ window.AisaHorizonApp = {
     };
 
     const switchPanel = (activeId) => {
+      this.activeActivityTab = activeId;
       Object.keys(actBtns).forEach(id => {
         const btn = document.getElementById(id);
         const panel = actBtns[id];
@@ -796,6 +991,7 @@ window.AisaHorizonApp = {
           if (panel) panel.style.display = 'none';
         }
       });
+      this.debouncedSaveSession();
     };
 
     document.getElementById('act-btn-explorer')?.addEventListener('click', () => switchPanel('act-btn-explorer'));
@@ -815,6 +1011,7 @@ window.AisaHorizonApp = {
         const isHidden = copilotPanel.style.display === 'none';
         copilotPanel.style.display = isHidden ? 'flex' : 'none';
         actBtnCopilot.classList.toggle('active', isHidden);
+        this.debouncedSaveSession();
       });
     }
 
@@ -836,89 +1033,109 @@ window.AisaHorizonApp = {
   // 3. MONACO EDITOR & DIFF REVIEW INITIALIZATION
   // ==========================================================================
   initMonaco() {
-    if (typeof require === 'undefined') {
-      console.warn('Monaco loader not found, checking CDN...');
-      return;
-    }
+    return new Promise((resolve) => {
+      if (typeof require === 'undefined') {
+        console.warn('Monaco loader not found, checking CDN...');
+        resolve();
+        return;
+      }
 
-    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+      require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
 
-    require(['vs/editor/editor.main'], () => {
-      // Define Celestial Theme
-      monaco.editor.defineTheme('horizon-celestial', {
-        base: 'vs-dark',
-        inherit: true,
-        rules: [
-          { token: 'comment', foreground: '64748b', fontStyle: 'italic' },
-          { token: 'keyword', foreground: 'ec4899', fontStyle: 'bold' },
-          { token: 'string', foreground: '34d399' },
-          { token: 'number', foreground: 'f59e0b' },
-          { token: 'function', foreground: '38bdf8' },
-          { token: 'variable', foreground: 'f1f5f9' },
-          { token: 'type', foreground: 'a855f7' }
-        ],
-        colors: {
-          'editor.background': '#0c0e15',
-          'editor.foreground': '#f1f5f9',
-          'editorLineNumber.foreground': '#334155',
-          'editorLineNumber.activeForeground': '#38bdf8',
-          'editorCursor.foreground': '#ec4899',
-          'editor.selectionBackground': '#38bdf833',
-          'editor.lineHighlightBackground': '#1e293b22',
-          'diffEditor.insertedTextBackground': '#10b98122',
-          'diffEditor.removedTextBackground': '#ef444422'
-        }
+      require(['vs/editor/editor.main'], () => {
+        // Define Celestial Theme
+        monaco.editor.defineTheme('horizon-celestial', {
+          base: 'vs-dark',
+          inherit: true,
+          rules: [
+            { token: 'comment', foreground: '64748b', fontStyle: 'italic' },
+            { token: 'keyword', foreground: 'ec4899', fontStyle: 'bold' },
+            { token: 'string', foreground: '34d399' },
+            { token: 'number', foreground: 'f59e0b' },
+            { token: 'function', foreground: '38bdf8' },
+            { token: 'variable', foreground: 'f1f5f9' },
+            { token: 'type', foreground: 'a855f7' }
+          ],
+          colors: {
+            'editor.background': '#0c0e15',
+            'editor.foreground': '#f1f5f9',
+            'editorLineNumber.foreground': '#334155',
+            'editorLineNumber.activeForeground': '#38bdf8',
+            'editorCursor.foreground': '#ec4899',
+            'editor.selectionBackground': '#38bdf833',
+            'editor.lineHighlightBackground': '#1e293b22',
+            'diffEditor.insertedTextBackground': '#10b98122',
+            'diffEditor.removedTextBackground': '#ef444422'
+          }
+        });
+
+        // 1. Text Editor
+        const container = document.getElementById('monaco-editor-instance');
+        this.editor = monaco.editor.create(container, {
+          value: '',
+          language: 'plaintext',
+          theme: 'horizon-celestial',
+          fontFamily: "'JetBrains Mono', Consolas, monospace",
+          fontSize: 13.5,
+          fontLigatures: true,
+          minimap: { enabled: true },
+          automaticLayout: true,
+          scrollBeyondLastLine: false,
+          smoothScrolling: true,
+          cursorBlinking: 'smooth',
+          cursorSmoothCaretAnimation: 'on',
+          bracketPairColorization: { enabled: true },
+          wordWrap: 'off'
+        });
+
+        // 2. Diff Editor
+        const diffContainer = document.getElementById('monaco-diff-editor-instance');
+        this.diffEditor = monaco.editor.createDiffEditor(diffContainer, {
+          theme: 'horizon-celestial',
+          fontFamily: "'JetBrains Mono', Consolas, monospace",
+          fontSize: 13,
+          automaticLayout: true,
+          readOnly: true,
+          renderSideBySide: true
+        });
+
+        // Cursor position listener
+        this.editor.onDidChangeCursorPosition((e) => {
+          const posEl = document.getElementById('sb-cursor-pos');
+          if (posEl) posEl.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+          const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
+          if (currentTab) {
+            currentTab._lastCursor = { lineNumber: e.position.lineNumber, column: e.position.column };
+          }
+          this.debouncedSaveSession();
+        });
+
+        // Scroll listener
+        this.editor.onDidScrollChange(() => {
+          const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
+          if (currentTab) {
+            currentTab._lastScrollTop = this.editor.getScrollTop();
+            currentTab._lastScrollLeft = this.editor.getScrollLeft();
+          }
+          this.debouncedSaveSession();
+        });
+
+        // Dirty flag listener
+        this.editor.onDidChangeModelContent(() => {
+          const activeTab = this.openTabs.find(t => t.path === this.activeTabPath);
+          if (activeTab && !activeTab.isDirty) {
+            activeTab.isDirty = true;
+            this.renderTabs();
+          }
+        });
+
+        // Monaco Shortcuts
+        this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => this.openInlineAI());
+        this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => this.openQuickOpen());
+        this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => this.saveActiveFile());
+
+        resolve();
       });
-
-      // 1. Text Editor
-      const container = document.getElementById('monaco-editor-instance');
-      this.editor = monaco.editor.create(container, {
-        value: '',
-        language: 'plaintext',
-        theme: 'horizon-celestial',
-        fontFamily: "'JetBrains Mono', Consolas, monospace",
-        fontSize: 13.5,
-        fontLigatures: true,
-        minimap: { enabled: true },
-        automaticLayout: true,
-        scrollBeyondLastLine: false,
-        smoothScrolling: true,
-        cursorBlinking: 'smooth',
-        cursorSmoothCaretAnimation: 'on',
-        bracketPairColorization: { enabled: true },
-        wordWrap: 'off'
-      });
-
-      // 2. Diff Editor
-      const diffContainer = document.getElementById('monaco-diff-editor-instance');
-      this.diffEditor = monaco.editor.createDiffEditor(diffContainer, {
-        theme: 'horizon-celestial',
-        fontFamily: "'JetBrains Mono', Consolas, monospace",
-        fontSize: 13,
-        automaticLayout: true,
-        readOnly: true,
-        renderSideBySide: true
-      });
-
-      // Cursor position listener
-      this.editor.onDidChangeCursorPosition((e) => {
-        const posEl = document.getElementById('sb-cursor-pos');
-        if (posEl) posEl.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
-      });
-
-      // Dirty flag listener
-      this.editor.onDidChangeModelContent(() => {
-        const activeTab = this.openTabs.find(t => t.path === this.activeTabPath);
-        if (activeTab && !activeTab.isDirty) {
-          activeTab.isDirty = true;
-          this.renderTabs();
-        }
-      });
-
-      // Monaco Shortcuts
-      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => this.openInlineAI());
-      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => this.openQuickOpen());
-      this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => this.saveActiveFile());
     });
   },
 
@@ -936,13 +1153,15 @@ window.AisaHorizonApp = {
   // ==========================================================================
   // 4. SMART FILE OPENING & MULTI-VIEWPORT (CODE, MEDIA, BINARY)
   // ==========================================================================
-  async openFile(filePath, lineNumber = null) {
+  async openFile(filePath, lineNumber = null, shouldSwitch = true) {
     const existing = this.openTabs.find(t => t.path === filePath);
     if (existing) {
-      this.switchTab(filePath);
-      if (lineNumber && this.editor && !existing.isMedia && !existing.isBinary) {
-        this.editor.revealLineInCenter(lineNumber);
-        this.editor.setPosition({ lineNumber, column: 1 });
+      if (shouldSwitch) {
+        this.switchTab(filePath);
+        if (lineNumber && this.editor && !existing.isMedia && !existing.isBinary) {
+          this.editor.revealLineInCenter(lineNumber);
+          this.editor.setPosition({ lineNumber, column: 1 });
+        }
       }
       return;
     }
@@ -950,7 +1169,15 @@ window.AisaHorizonApp = {
     if (!window.AisaHorizon) return;
     const res = await window.AisaHorizon.readFile(filePath);
     if (!res.success) {
-      alert('Không thể mở tệp: ' + res.error);
+      if (shouldSwitch) {
+        this.showToast({
+          title: 'Không thể mở tệp',
+          message: `Không tìm thấy hoặc không thể đọc tệp: ${filePath.split(/[\\/]/).pop()}`,
+          type: 'warning'
+        });
+      } else {
+        console.warn('Không thể mở tệp phiên trước:', filePath, res.error);
+      }
       return;
     }
 
@@ -996,17 +1223,32 @@ window.AisaHorizonApp = {
 
     this.openTabs.push(tab);
     this.renderTabs();
-    this.switchTab(filePath);
 
-    if (lineNumber && this.editor && !tab.isMedia && !tab.isBinary) {
-      this.editor.revealLineInCenter(lineNumber);
-      this.editor.setPosition({ lineNumber, column: 1 });
+    if (shouldSwitch) {
+      this.switchTab(filePath);
+      if (lineNumber && this.editor && !tab.isMedia && !tab.isBinary) {
+        this.editor.revealLineInCenter(lineNumber);
+        this.editor.setPosition({ lineNumber, column: 1 });
+      }
     }
+
+    this.debouncedSaveSession();
   },
 
   switchTab(filePath) {
     const tab = this.openTabs.find(t => t.path === filePath);
     if (!tab) return;
+
+    // Save previous tab's cursor & scroll before switching
+    if (this.activeTabPath && this.editor && this.activeTabPath !== filePath) {
+      const oldTab = this.openTabs.find(t => t.path === this.activeTabPath);
+      if (oldTab && !oldTab.isMedia && !oldTab.isBinary) {
+        const pos = this.editor.getPosition();
+        if (pos) oldTab._lastCursor = { lineNumber: pos.lineNumber, column: pos.column };
+        oldTab._lastScrollTop = this.editor.getScrollTop();
+        oldTab._lastScrollLeft = this.editor.getScrollLeft();
+      }
+    }
 
     this.activeTabPath = filePath;
 
@@ -1042,6 +1284,16 @@ window.AisaHorizonApp = {
         editorInstance.style.display = 'block';
         if (this.editor && tab.model) {
           this.editor.setModel(tab.model);
+          if (tab._lastCursor) {
+            this.editor.setPosition(tab._lastCursor);
+            this.editor.revealPositionInCenter(tab._lastCursor);
+          }
+          if (typeof tab._lastScrollTop === 'number') {
+            this.editor.setScrollTop(tab._lastScrollTop);
+          }
+          if (typeof tab._lastScrollLeft === 'number') {
+            this.editor.setScrollLeft(tab._lastScrollLeft);
+          }
           this.editor.focus();
         }
       }
@@ -1052,6 +1304,7 @@ window.AisaHorizonApp = {
     this.updateBreadcrumbs();
     this.renderTabs();
     this.selectTreeItem(null, filePath, false);
+    this.debouncedSaveSession();
   },
 
   renderMediaView(container, tab) {
@@ -1192,6 +1445,7 @@ window.AisaHorizonApp = {
     }
 
     this.renderTabs();
+    this.debouncedSaveSession();
   },
 
   async saveActiveFile() {
@@ -1753,6 +2007,7 @@ window.AisaHorizonApp = {
             }
           }
         }
+        this.debouncedSaveSession();
       });
 
       row.addEventListener('contextmenu', (e) => {
@@ -2350,6 +2605,7 @@ window.AisaHorizonApp = {
     } else if (tabName === 'debug') {
       document.getElementById('debug-console-input')?.focus();
     }
+    this.debouncedSaveSession();
   },
 
   toggleBottomPanel(forceOpen = null) {
@@ -2370,6 +2626,7 @@ window.AisaHorizonApp = {
       this.editor?.layout();
       this.diffEditor?.layout();
     }, 50);
+    this.debouncedSaveSession();
   },
 
   refreshProblems() {

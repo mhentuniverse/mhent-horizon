@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   readDir: (dirPath = null) => ipcRenderer.invoke('horizon:read-dir', dirPath),
   onWorkspaceChanged: (callback) => ipcRenderer.on('horizon:workspace-changed', (event, val) => callback(val)),
   onWindowFocused: (callback) => ipcRenderer.on('horizon:window-focused', (event, val) => callback(val)),
+  getSessionState: () => ipcRenderer.invoke('horizon:get-session-state'),
+  saveSessionState: (state) => ipcRenderer.invoke('horizon:save-session-state', state),
 
   // File Operations (Monaco Editor & Media Integration)
   readFile: (filePath) => ipcRenderer.invoke('horizon:read-file', filePath),

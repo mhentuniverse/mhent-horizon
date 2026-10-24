@@ -36,13 +36,40 @@ function getInitialWorkspace() {
   return app.getPath('documents');
 }
 
-function saveWorkspaceState(wsPath) {
+function getSessionState() {
+  try {
+    const stateFile = path.join(app.getPath('userData'), 'horizon-state.json');
+    if (fs.existsSync(stateFile)) {
+      return JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    }
+  } catch (e) {}
+  return null;
+}
+
+function saveSessionState(state) {
   try {
     const stateDir = app.getPath('userData');
     if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
     const stateFile = path.join(stateDir, 'horizon-state.json');
-    fs.writeFileSync(stateFile, JSON.stringify({ lastWorkspace: wsPath, updatedAt: new Date().toISOString() }, null, 2));
-  } catch (e) {}
+    let existing = {};
+    if (fs.existsSync(stateFile)) {
+      try { existing = JSON.parse(fs.readFileSync(stateFile, 'utf-8')); } catch (e) {}
+    }
+    const updated = {
+      ...existing,
+      ...state,
+      lastWorkspace: state.workspace || state.lastWorkspace || existing.lastWorkspace || activeWorkspacePath,
+      updatedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(stateFile, JSON.stringify(updated, null, 2));
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function saveWorkspaceState(wsPath) {
+  saveSessionState({ workspace: wsPath, lastWorkspace: wsPath });
 }
 
 // Default workspace with persistence
@@ -209,6 +236,14 @@ ipcMain.handle('window:is-maximized', () => {
 // ============================================================================
 ipcMain.handle('horizon:get-workspace-path', () => {
   return activeWorkspacePath;
+});
+
+ipcMain.handle('horizon:get-session-state', () => {
+  return getSessionState();
+});
+
+ipcMain.handle('horizon:save-session-state', (event, state) => {
+  return saveSessionState(state);
 });
 
 ipcMain.handle('horizon:open-workspace-dialog', async () => {
