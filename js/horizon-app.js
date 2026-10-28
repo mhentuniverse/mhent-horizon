@@ -569,31 +569,28 @@ window.AisaHorizonApp = {
     const selectModel = document.getElementById('select-agent-model');
     const modelIcon = document.getElementById('agent-model-icon');
     const btnUndo = document.getElementById('btn-undo-agent-action');
+    const btnRefresh = document.getElementById('btn-refresh-models');
     const sbStatus = document.getElementById('sb-ai-status');
+
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', () => {
+        this.scanAndUpdateModels(true);
+      });
+    }
 
     if (selectModel) {
       selectModel.addEventListener('change', async () => {
         this.selectedModel = selectModel.value;
 
-        if (this.selectedModel === 'ollama-local') {
+        if (this.selectedModel.startsWith('ollama:') || this.selectedModel === 'ollama-local') {
           if (modelIcon) modelIcon.textContent = '🦙';
-          const res = await window.AisaHorizon?.checkOllama();
-          if (res && res.online) {
-            const names = (res.models || []).map(m => m.name).join(', ') || 'qwen2.5-coder';
-            if (sbStatus) sbStatus.textContent = `● Ollama Local Online (${res.models.length} models)`;
-            this.showToast({
-              title: 'Ollama Local AI (0đ)',
-              message: `Đã kết nối thành công Ollama! Tìm thấy ${res.models.length} model: ${names}. Hoạt động 100% offline trên GPU không tốn 1 xu và không cần API Key!`,
-              type: 'success'
-            });
-          } else {
-            if (sbStatus) sbStatus.textContent = '○ Ollama Offline (localhost:11434)';
-            this.showToast({
-              title: 'Ollama Chưa Khởi Chạy',
-              message: 'Không phát hiện Ollama trên http://localhost:11434. Cậu hãy bật Ollama để dùng Local AI không cần API key nhé!',
-              type: 'warning'
-            });
-          }
+          const modelName = this.selectedModel.startsWith('ollama:') ? this.selectedModel.replace('ollama:', '') : (this.detectedOllamaModels?.[0]?.name || 'qwen2.5:7b');
+          if (sbStatus) sbStatus.textContent = `● Ollama: ${modelName}`;
+          this.showToast({
+            title: 'Mô hình Ollama Local AI',
+            message: `Đã chọn mô hình ${modelName} chạy offline nội bộ trên GPU/CPU (0đ / Miễn phí 100%)!`,
+            type: 'success'
+          });
         } else if (this.selectedModel === 'mhent-proxy') {
           if (modelIcon) modelIcon.textContent = '🌐';
           if (sbStatus) sbStatus.textContent = '● MHEnt Cloud Proxy Account';
@@ -610,12 +607,12 @@ window.AisaHorizonApp = {
             message: 'Đã mở bảng Cài Đặt AI để thiết lập API Key hoặc Base URL!',
             type: 'info'
           });
-        } else if (this.selectedModel === 'gemini-2.0-pro') {
+        } else if (this.selectedModel.includes('pro')) {
           if (modelIcon) modelIcon.textContent = '🧠';
-          if (sbStatus) sbStatus.textContent = '● Gemini 2.0 Pro Exp Online';
+          if (sbStatus) sbStatus.textContent = `● ${this.selectedModel} Online`;
         } else {
           if (modelIcon) modelIcon.textContent = '🌟';
-          if (sbStatus) sbStatus.textContent = '● Gemini 2.0 Flash Online';
+          if (sbStatus) sbStatus.textContent = `● ${this.selectedModel} Online`;
         }
       });
     }
@@ -646,6 +643,146 @@ window.AisaHorizonApp = {
             type: 'info'
           });
         }
+      });
+    }
+
+    // Trigger initial scan to discover models
+    setTimeout(() => {
+      this.scanAndUpdateModels(false);
+    }, 600);
+  },
+
+  async scanAndUpdateModels(isManual = false) {
+    const selectModel = document.getElementById('select-agent-model');
+    const modelIcon = document.getElementById('agent-model-icon');
+    const sbStatus = document.getElementById('sb-ai-status');
+    const btnRefresh = document.getElementById('btn-refresh-models');
+
+    if (btnRefresh) btnRefresh.classList.add('spinning');
+
+    const prevSelected = selectModel ? selectModel.value : this.selectedModel;
+
+    let ollamaOnline = false;
+    let ollamaModels = [];
+    let geminiModels = [];
+
+    try {
+      // 1. Scan Ollama
+      if (window.AisaHorizon?.checkOllama) {
+        const ollamaUrlInput = document.getElementById('setting-ollama-url');
+        const customUrl = ollamaUrlInput ? ollamaUrlInput.value.trim() : null;
+        const res = await window.AisaHorizon.checkOllama(customUrl);
+        if (res && (res.online || res.connected)) {
+          ollamaOnline = true;
+          ollamaModels = res.models || [];
+        }
+      }
+
+      // 2. Scan Gemini Cloud Models
+      let apiKey = this.geminiKey || localStorage.getItem('mhent_ai_api_key');
+      if (!apiKey && window.AisaHorizon?.getApiKey) {
+        apiKey = await window.AisaHorizon.getApiKey();
+      }
+      if (apiKey && window.AisaHorizon?.listGeminiModels) {
+        const gRes = await window.AisaHorizon.listGeminiModels(apiKey);
+        if (gRes && gRes.success && Array.isArray(gRes.models)) {
+          geminiModels = gRes.models;
+        }
+      }
+    } catch (err) {
+      console.warn('[Model Discovery] Scan error:', err);
+    } finally {
+      if (btnRefresh) btnRefresh.classList.remove('spinning');
+    }
+
+    this.detectedOllamaModels = ollamaModels;
+    this.detectedGeminiModels = geminiModels;
+
+    if (selectModel) {
+      let html = '';
+
+      // --- Group 1: Gemini Cloud Models ---
+      html += '<optgroup label="✨ Google Gemini Cloud (Mới nhất)">';
+      if (geminiModels.length > 0) {
+        const priority = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-pro-exp-02-05', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+        const sortedGemini = [...geminiModels].sort((a, b) => {
+          const idxA = priority.indexOf(a.id);
+          const idxB = priority.indexOf(b.id);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return a.id.localeCompare(b.id);
+        });
+
+        for (const m of sortedGemini) {
+          const icon = m.id.includes('pro') ? '🧠' : '🌟';
+          html += `<option value="${m.id}">${icon} ${m.displayName || m.id}</option>`;
+        }
+      } else {
+        html += '<option value="gemini-2.5-flash">⚡ Gemini 2.5 Flash (Khuyên dùng)</option>';
+        html += '<option value="gemini-2.5-pro">🧠 Gemini 2.5 Pro (Suy luận sâu)</option>';
+        html += '<option value="gemini-2.0-flash">🌟 Gemini 2.0 Flash</option>';
+        html += '<option value="gemini-2.0-pro">🧠 Gemini 2.0 Pro Exp</option>';
+      }
+      html += '</optgroup>';
+
+      // --- Group 2: Ollama Local Models ---
+      html += '<optgroup label="🦙 Ollama Local AI (Offline 0đ / Không cần Key)">';
+      if (ollamaOnline && ollamaModels.length > 0) {
+        for (const m of ollamaModels) {
+          const sizeGb = m.size ? ` (${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB)` : '';
+          html += `<option value="ollama:${m.name}">🦙 Ollama: ${m.name}${sizeGb}</option>`;
+        }
+      } else if (ollamaOnline) {
+        html += '<option value="ollama-local">🦙 Ollama Local (Đã kết nối, chưa có model - gõ: ollama pull qwen2.5:7b)</option>';
+      } else {
+        html += '<option value="ollama-local" disabled>🦙 Ollama Local (Offline - Khởi động Ollama ở cổng 11434 để dùng)</option>';
+      }
+      html += '</optgroup>';
+
+      // --- Group 3: Account & Configuration ---
+      html += '<optgroup label="⚙️ Tài khoản & Cấu hình">';
+      html += '<option value="mhent-proxy">🌐 MHEnt Cloud Account</option>';
+      html += '<option value="custom-key">🔑 Tự nhập API Key...</option>';
+      html += '</optgroup>';
+
+      selectModel.innerHTML = html;
+
+      // Select default or restore previous selection
+      const options = Array.from(selectModel.options).map(o => o.value);
+      if (prevSelected && options.includes(prevSelected)) {
+        selectModel.value = prevSelected;
+      } else if (prevSelected === 'ollama-local' && ollamaModels.length > 0) {
+        selectModel.value = `ollama:${ollamaModels[0].name}`;
+      } else if (options.includes('gemini-2.5-flash')) {
+        selectModel.value = 'gemini-2.5-flash';
+      } else if (options.includes('gemini-2.0-flash')) {
+        selectModel.value = 'gemini-2.0-flash';
+      }
+
+      this.selectedModel = selectModel.value;
+
+      if (this.selectedModel.startsWith('ollama:') || this.selectedModel === 'ollama-local') {
+        if (modelIcon) modelIcon.textContent = '🦙';
+        if (sbStatus) sbStatus.textContent = ollamaOnline
+          ? `● Ollama: ${this.selectedModel.replace('ollama:', '')}`
+          : '○ Ollama Offline';
+      } else if (this.selectedModel.includes('pro')) {
+        if (modelIcon) modelIcon.textContent = '🧠';
+        if (sbStatus) sbStatus.textContent = `● ${this.selectedModel} Online`;
+      } else {
+        if (modelIcon) modelIcon.textContent = '🌟';
+        if (sbStatus) sbStatus.textContent = `● ${this.selectedModel} Online`;
+      }
+    }
+
+    if (isManual) {
+      const oCount = ollamaModels.length;
+      const gCount = geminiModels.length;
+      this.showToast({
+        title: 'Làm Mới Mô Hình AI Thành Công',
+        message: `Đã phát hiện ${oCount} mô hình Ollama Local (${ollamaOnline ? 'Trực tuyến' : 'Ngoại tuyến'}) và ${gCount} mô hình Gemini Cloud sẵn sàng phục vụ!`,
+        type: 'success'
       });
     }
   },
@@ -3221,14 +3358,15 @@ window.AisaHorizonApp = {
     return res;
   },
 
-  async runOllamaAgentLoop(userPrompt, fileContext) {
-    this.appendAgentMessage('harmony', '🦙 Ollama Local', 'Đang kết nối tới mô hình AI Local trên máy tính (0đ / Miễn phí 100%)...');
+  async runOllamaAgentLoop(userPrompt, fileContext, targetModel = null) {
+    const modelToUse = targetModel || (this.selectedModel && this.selectedModel.startsWith('ollama:') ? this.selectedModel.replace('ollama:', '') : (this.detectedOllamaModels?.[0]?.name || 'qwen2.5:7b'));
+
+    this.appendAgentMessage('harmony', '🦙 Ollama Local', `Đang kết nối tới mô hình [${modelToUse}] trên GPU/CPU nội bộ (0đ / Miễn phí 100%)...`);
     try {
-      const res = await fetch('http://localhost:11434/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'qwen2.5-coder:7b',
+      let output = '';
+      if (window.AisaHorizon?.ollamaChat) {
+        const res = await window.AisaHorizon.ollamaChat({
+          model: modelToUse,
           messages: [
             {
               role: 'system',
@@ -3238,17 +3376,39 @@ window.AisaHorizonApp = {
               role: 'user',
               content: fileContext + userPrompt
             }
-          ],
-          stream: false
-        })
-      });
+          ]
+        });
+        if (!res.success) throw new Error(res.error || 'Lỗi không xác định từ Ollama');
+        output = res.content || '';
+      } else {
+        // Fallback browser direct fetch to 127.0.0.1
+        const res = await fetch('http://127.0.0.1:11434/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: modelToUse,
+            messages: [
+              {
+                role: 'system',
+                content: 'Bạn là Trợ lý AI lập trình trong AISA Horizon IDE. Đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika. Trả lời chi tiết, xuất mã nguồn chuẩn xác bằng tiếng Việt.'
+              },
+              {
+                role: 'user',
+                content: fileContext + userPrompt
+              }
+            ],
+            stream: false
+          })
+        });
 
-      if (!res.ok) throw new Error(`Ollama phản hồi mã HTTP ${res.status}`);
-      const data = await res.json();
-      const output = data.message?.content || '';
-      this.appendAgentAccordion('Xử lý bởi GPU / CPU nội bộ (Ollama Local)', output);
+        if (!res.ok) throw new Error(`Ollama phản hồi mã HTTP ${res.status}`);
+        const data = await res.json();
+        output = data.message?.content || '';
+      }
+
+      this.appendAgentAccordion(`Xử lý bởi GPU / CPU nội bộ (${modelToUse})`, output);
     } catch (e) {
-      this.appendAgentMessage('echo', '😈 Echo', `Không thể gửi tới Ollama (${e.message}). Cậu đảm bảo Ollama đang chạy ở cổng 11434 nhé!`);
+      this.appendAgentMessage('echo', '😈 Echo', `Không thể gửi tới Ollama (${e.message}). Cậu đảm bảo Ollama đang chạy ở cổng 11434 và mô hình [${modelToUse}] đã được tải nhé!`);
     }
   },
 
@@ -3258,8 +3418,9 @@ window.AisaHorizonApp = {
     const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
     const fileContext = currentTab && !currentTab.isMedia && !currentTab.isBinary ? `\n[Tệp đang mở: ${currentTab.name} (${currentTab.path})]\n` : '';
 
-    if (this.selectedModel === 'ollama-local') {
-      await this.runOllamaAgentLoop(userPrompt, fileContext);
+    if (this.selectedModel === 'ollama-local' || (this.selectedModel && this.selectedModel.startsWith('ollama:'))) {
+      const targetModel = this.selectedModel.startsWith('ollama:') ? this.selectedModel.replace('ollama:', '') : null;
+      await this.runOllamaAgentLoop(userPrompt, fileContext, targetModel);
       return;
     }
 
@@ -3272,7 +3433,10 @@ window.AisaHorizonApp = {
       return;
     }
 
-    const modelName = this.selectedModel === 'gemini-2.0-pro' ? 'gemini-2.0-pro-exp-02-05' : 'gemini-2.0-flash';
+    let modelName = 'gemini-2.5-flash';
+    if (this.selectedModel && this.selectedModel.startsWith('gemini-')) {
+      modelName = this.selectedModel === 'gemini-2.0-pro' ? 'gemini-2.0-pro-exp-02-05' : this.selectedModel;
+    }
     const systemPrompt = `Bạn là Google Antigravity-style Autonomous AI Agent trong AISA Horizon IDE của Miyazaki Haruto Entertainment Co., Ltd.
 Đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika.
 ĐẶC ĐIỂM QUAN TRỌNG:
@@ -4383,6 +4547,7 @@ window.AisaHorizonApp = {
       }
       this.geminiKey = newKey;
       localStorage.setItem('mhent_ai_api_key', newKey);
+      await this.scanAndUpdateModels(false);
       this.mascotSay('🌸 Harmony: Đã lưu API Key an toàn trong hệ thống Studio! ✨');
       this.showToast({
         title: 'Cài Đặt AI',
@@ -4396,15 +4561,19 @@ window.AisaHorizonApp = {
     const ollamaHint = document.getElementById('ollama-status-hint');
     if (testOllamaBtn && ollamaHint) {
       testOllamaBtn.addEventListener('click', async () => {
+        const urlInput = document.getElementById('setting-ollama-url');
+        const customUrl = urlInput ? urlInput.value.trim() : null;
         ollamaHint.textContent = 'Trạng thái: Đang kiểm tra cổng 11434...';
         ollamaHint.style.color = '#38bdf8';
         if (window.AisaHorizon?.checkOllama) {
-          const res = await window.AisaHorizon.checkOllama();
-          if (res?.connected) {
-            ollamaHint.textContent = `Trạng thái: ✔ Đã kết nối Ollama (${res.models?.length || 0} mô hình sẵn có)`;
+          const res = await window.AisaHorizon.checkOllama(customUrl);
+          if (res?.online || res?.connected) {
+            const modelNames = (res.models || []).map(m => m.name).join(', ');
+            ollamaHint.textContent = `Trạng thái: ✔ Đã kết nối Ollama (${res.models?.length || 0} mô hình: ${modelNames || 'sẵn sàng'})`;
             ollamaHint.style.color = '#34d399';
+            await this.scanAndUpdateModels(false);
           } else {
-            ollamaHint.textContent = 'Trạng thái: ⚠ Không thấy tiến trình Ollama chạy ở http://localhost:11434';
+            ollamaHint.textContent = `Trạng thái: ⚠ Không thấy tiến trình Ollama chạy ở ${res?.host || customUrl || 'http://127.0.0.1:11434'}`;
             ollamaHint.style.color = '#f87171';
           }
         }

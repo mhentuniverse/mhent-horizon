@@ -723,6 +723,7 @@
             <option value="mhent-proxy">🌐 MHEnt Cloud Account</option>
             <option value="custom-key">🔑 Tự nhập API Key...</option>
           </select>
+          <button type="button" class="btn-refresh-models" id="btn-refresh-models" title="Tự động quét & làm mới danh sách mô hình (Ollama Local & Gemini Cloud)">🔄</button>
         </div>
         <button type="button" class="undo-agent-btn" id="btn-undo-agent-action" title="Hoàn tác chỉnh sửa gần nhất của Agent">
           ↶ Hoàn tác (Undo)
@@ -1045,7 +1046,7 @@
             <div class="settings-form-group">
               <label class="settings-label">Máy chủ Ollama Local AI (Không cần key)</label>
               <div class="settings-input-row">
-                <input type="text" id="setting-ollama-url" class="settings-input-text" value="http://localhost:11434" style="flex: 1;">
+                <input type="text" id="setting-ollama-url" class="settings-input-text" value="http://127.0.0.1:11434" style="flex: 1;">
                 <button type="button" class="settings-btn-action" id="btn-test-ollama">Kiểm tra kết nối</button>
               </div>
               <span class="settings-hint" id="ollama-status-hint">Trạng thái: Chưa kiểm tra</span>

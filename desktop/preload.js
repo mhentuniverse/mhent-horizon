@@ -77,6 +77,8 @@ contextBridge.exposeInMainWorld('AisaHorizon', {
   replaceFileContent: (filePath, targetContent, replacementContent) => ipcRenderer.invoke('horizon:replace-file-content', { filePath, targetContent, replacementContent }),
   agentExecuteTool: (toolName, args) => ipcRenderer.invoke('horizon:agent-execute-tool', { toolName, args }),
   undoLastAgentAction: () => ipcRenderer.invoke('horizon:undo-last-agent-action'),
-  checkOllama: () => ipcRenderer.invoke('horizon:check-ollama')
+  checkOllama: (customUrl = null) => ipcRenderer.invoke('horizon:check-ollama', customUrl),
+  ollamaChat: (params) => ipcRenderer.invoke('horizon:ollama-chat', params),
+  listGeminiModels: (apiKey = null) => ipcRenderer.invoke('horizon:list-gemini-models', apiKey)
 });
 

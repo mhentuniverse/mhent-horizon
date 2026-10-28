@@ -1248,15 +1248,91 @@ ipcMain.handle('horizon:agent-execute-tool', async (event, { toolName, args }) =
   }
 });
 
-// Ollama Local Detection
-ipcMain.handle('horizon:check-ollama', async () => {
+// Ollama Local Detection & Dynamic Model Discovery
+ipcMain.handle('horizon:check-ollama', async (event, customUrl) => {
+  const hosts = [];
+  if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
+    hosts.push(customUrl.trim().replace(/\/+$/, ''));
+  }
+  hosts.push('http://127.0.0.1:11434', 'http://localhost:11434');
+
+  for (const host of hosts) {
+    try {
+      const res = await fetch(`${host}/api/tags`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          online: true,
+          connected: true,
+          host,
+          models: (data.models || []).map(m => ({
+            name: m.name,
+            model: m.model,
+            size: m.size,
+            details: m.details
+          }))
+        };
+      }
+    } catch (e) {}
+  }
+  return { online: false, connected: false, models: [] };
+});
+
+// Ollama Local Chat Execution (Main Process Bridge to avoid CORS / IPv6 issues)
+ipcMain.handle('horizon:ollama-chat', async (event, { model, messages, baseUrl }) => {
+  const host = baseUrl || 'http://127.0.0.1:11434';
   try {
-    const res = await fetch('http://localhost:11434/api/tags', { method: 'GET', signal: AbortSignal.timeout(1500) });
-    if (res.ok) {
-      const data = await res.json();
-      return { online: true, models: data.models || [] };
+    const res = await fetch(`${host}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model || 'qwen2.5:7b',
+        messages: messages || [],
+        stream: false
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      return { success: false, error: `Ollama trả về mã lỗi HTTP ${res.status}: ${errText}` };
     }
-  } catch (e) {}
-  return { online: false, models: [] };
+    const data = await res.json();
+    return { success: true, message: data.message?.content || '', raw: data };
+  } catch (err) {
+    return { success: false, error: `Không thể kết nối tới Ollama (${err.message}). Cậu đảm bảo Ollama đang chạy ở cổng 11434 nhé!` };
+  }
+});
+
+// Dynamic Gemini Models Auto-Discovery via API
+ipcMain.handle('horizon:list-gemini-models', async (event, passedKey) => {
+  const key = passedKey || getApiKey();
+  if (!key) return { success: false, error: 'Chưa có Gemini API Key' };
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) {
+      return { success: false, error: `Google API trả về mã lỗi ${res.status}` };
+    }
+    const data = await res.json();
+    const generationModels = (data.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .filter(m => !m.name.includes('vision') && !m.name.includes('embedding') && !m.name.includes('aqa') && !m.name.includes('tts'))
+      .map(m => ({
+        id: m.name.replace('models/', ''),
+        displayName: m.displayName || m.name.replace('models/', ''),
+        description: m.description || '',
+        inputTokenLimit: m.inputTokenLimit,
+        outputTokenLimit: m.outputTokenLimit
+      }));
+
+    return { success: true, models: generationModels };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });
 
