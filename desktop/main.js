@@ -1299,7 +1299,8 @@ ipcMain.handle('horizon:ollama-chat', async (event, { model, messages, baseUrl }
       return { success: false, error: `Ollama trả về mã lỗi HTTP ${res.status}: ${errText}` };
     }
     const data = await res.json();
-    return { success: true, message: data.message?.content || '', raw: data };
+    const content = data.message?.content || '';
+    return { success: true, content, message: content, raw: data };
   } catch (err) {
     return { success: false, error: `Không thể kết nối tới Ollama (${err.message}). Cậu đảm bảo Ollama đang chạy ở cổng 11434 nhé!` };
   }

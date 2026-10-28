@@ -3361,7 +3361,7 @@ window.AisaHorizonApp = {
   async runOllamaAgentLoop(userPrompt, fileContext, targetModel = null) {
     const modelToUse = targetModel || (this.selectedModel && this.selectedModel.startsWith('ollama:') ? this.selectedModel.replace('ollama:', '') : (this.detectedOllamaModels?.[0]?.name || 'qwen2.5:7b'));
 
-    this.appendAgentMessage('harmony', '🦙 Ollama Local', `Đang kết nối tới mô hình [${modelToUse}] trên GPU/CPU nội bộ (0đ / Miễn phí 100%)...`);
+    const loadingBubble = this.appendAgentMessage('harmony', '🦙 Ollama Local', `Đang kết nối và suy luận trên mô hình [${modelToUse}] (0đ / Miễn phí 100%)...`);
     try {
       let output = '';
       if (window.AisaHorizon?.ollamaChat) {
@@ -3370,16 +3370,16 @@ window.AisaHorizonApp = {
           messages: [
             {
               role: 'system',
-              content: 'Bạn là Trợ lý AI lập trình trong AISA Horizon IDE. Đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika. Trả lời chi tiết, xuất mã nguồn chuẩn xác bằng tiếng Việt.'
+              content: 'Bạn là Trợ lý AI lập trình chuyên nghiệp và tận tâm trong AISA Horizon IDE của Miyazaki Haruto Entertainment Co., Ltd. Bạn đang đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika. Hãy giải thích chi tiết, cặn kẽ từng hàm/phương thức, phân tích logic kiến trúc, chỉ ra mục đích sử dụng và xuất mã nguồn chuẩn xác bằng tiếng Việt một cách dễ hiểu, sinh động.'
             },
             {
               role: 'user',
-              content: fileContext + userPrompt
+              content: (fileContext ? fileContext + '\n\n' : '') + userPrompt
             }
           ]
         });
         if (!res.success) throw new Error(res.error || 'Lỗi không xác định từ Ollama');
-        output = res.content || '';
+        output = res.content || res.message || '';
       } else {
         // Fallback browser direct fetch to 127.0.0.1
         const res = await fetch('http://127.0.0.1:11434/api/chat', {
@@ -3390,11 +3390,11 @@ window.AisaHorizonApp = {
             messages: [
               {
                 role: 'system',
-                content: 'Bạn là Trợ lý AI lập trình trong AISA Horizon IDE. Đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika. Trả lời chi tiết, xuất mã nguồn chuẩn xác bằng tiếng Việt.'
+                content: 'Bạn là Trợ lý AI lập trình chuyên nghiệp và tận tâm trong AISA Horizon IDE của Miyazaki Haruto Entertainment Co., Ltd. Bạn đang đồng hành cùng Nhà sáng lập & Kiến trúc sư trưởng Yorutsuki Yurika. Hãy giải thích chi tiết, cặn kẽ từng hàm/phương thức, phân tích logic kiến trúc, chỉ ra mục đích sử dụng và xuất mã nguồn chuẩn xác bằng tiếng Việt một cách dễ hiểu, sinh động.'
               },
               {
                 role: 'user',
-                content: fileContext + userPrompt
+                content: (fileContext ? fileContext + '\n\n' : '') + userPrompt
               }
             ],
             stream: false
@@ -3406,8 +3406,29 @@ window.AisaHorizonApp = {
         output = data.message?.content || '';
       }
 
-      this.appendAgentAccordion(`Xử lý bởi GPU / CPU nội bộ (${modelToUse})`, output);
+      // Remove loading placeholder
+      if (loadingBubble && loadingBubble.parentNode) {
+        loadingBubble.parentNode.removeChild(loadingBubble);
+      }
+
+      if (!output || !output.trim()) {
+        this.appendAgentMessage('echo', '😈 Echo', `Mô hình [${modelToUse}] trả về phản hồi rỗng. Cậu thử gửi lại câu hỏi xem sao nhé!`);
+        return;
+      }
+
+      // Check if output has reasoning <thought> or <think> tags (e.g. DeepSeek-R1 or Qwen)
+      const thoughtMatch = output.match(/<(thought|think)>([\s\S]*?)<\/\1>/i);
+      if (thoughtMatch) {
+        const thoughtText = thoughtMatch[2].trim();
+        const finalAnswer = output.replace(/<(thought|think)>[\s\S]*?<\/\1>/i, '').trim();
+        this.appendAgentAccordion(thoughtText || `Quá trình suy nghĩ (${modelToUse})`, finalAnswer);
+      } else {
+        this.appendAgentMessage('harmony', `🌸 Harmony (Ollama: ${modelToUse})`, output);
+      }
     } catch (e) {
+      if (loadingBubble && loadingBubble.parentNode) {
+        loadingBubble.parentNode.removeChild(loadingBubble);
+      }
       this.appendAgentMessage('echo', '😈 Echo', `Không thể gửi tới Ollama (${e.message}). Cậu đảm bảo Ollama đang chạy ở cổng 11434 và mô hình [${modelToUse}] đã được tải nhé!`);
     }
   },
@@ -3415,8 +3436,28 @@ window.AisaHorizonApp = {
   async askAgent(userPrompt) {
     this.appendAgentMessage('user', 'Yorutsuki Yurika', userPrompt);
 
+    // Extract active editor file content for context
     const currentTab = this.openTabs.find(t => t.path === this.activeTabPath);
-    const fileContext = currentTab && !currentTab.isMedia && !currentTab.isBinary ? `\n[Tệp đang mở: ${currentTab.name} (${currentTab.path})]\n` : '';
+    let fileContext = '';
+    if (currentTab && !currentTab.isMedia && !currentTab.isBinary) {
+      const code = this.editor ? this.editor.getValue() : (currentTab.content || '');
+      const extLang = (currentTab.ext || '').replace('.', '') || 'text';
+      fileContext = `[Tệp đang mở trên trình soạn thảo: ${currentTab.name} (${currentTab.path})]\n\`\`\`${extLang}\n${code}\n\`\`\``;
+    }
+
+    // Support @filename mentions in prompt to attach specific tab's content
+    const mentions = userPrompt.match(/@([a-zA-Z0-9_.-]+)/g);
+    if (mentions) {
+      for (const m of mentions) {
+        const rawName = m.replace('@', '');
+        const targetTab = this.openTabs.find(t => t.name.toLowerCase() === rawName.toLowerCase());
+        if (targetTab && targetTab !== currentTab && !targetTab.isMedia && !targetTab.isBinary) {
+          const tCode = targetTab.content || '';
+          const tLang = (targetTab.ext || '').replace('.', '') || 'text';
+          fileContext += `\n\n[Tệp được tag ${m}: ${targetTab.name} (${targetTab.path})]\n\`\`\`${tLang}\n${tCode}\n\`\`\``;
+        }
+      }
+    }
 
     if (this.selectedModel === 'ollama-local' || (this.selectedModel && this.selectedModel.startsWith('ollama:'))) {
       const targetModel = this.selectedModel.startsWith('ollama:') ? this.selectedModel.replace('ollama:', '') : null;
@@ -3641,6 +3682,7 @@ window.AisaHorizonApp = {
 
     container.appendChild(bubble);
     container.scrollTop = container.scrollHeight;
+    return bubble;
   },
 
   // ==========================================================================
